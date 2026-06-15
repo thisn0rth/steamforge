@@ -1,0 +1,35 @@
+{
+  "name": "streamforge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local eSports livestream production control suite: CS2 GSI listener, OBS scene/overlay control, rigs, and an After Effects-style overlay editor.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/shared",
+    "packages/server",
+    "packages/client"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @streamforge/shared && npm run build --workspace @streamforge/server && npm run build --workspace @streamforge/client",
+    "dev": "concurrently -n shared,server,client -c gray,blue,magenta \"npm:dev:shared\" \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:shared": "npm run dev --workspace @streamforge/shared",
+    "dev:server": "npm run dev --workspace @streamforge/server",
+    "dev:client": "npm run dev --workspace @streamforge/client",
+    "start": "npm run build && npm run start --workspace @streamforge/server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write \"packages/**/*.{ts,tsx,css,json,md}\""
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "concurrently": "^9.1.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
