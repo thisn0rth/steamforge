@@ -16,6 +16,7 @@
     "dev:server": "npm run dev --workspace @streamforge/server",
     "dev:client": "npm run dev --workspace @streamforge/client",
     "start": "npm run build && npm run start --workspace @streamforge/server",
+    "share": "node scripts/share.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write \"packages/**/*.{ts,tsx,css,json,md}\""

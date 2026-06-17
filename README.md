@@ -126,8 +126,23 @@ STREAMFORGE_TEAM_PASSWORD=your-team-password
   live socket.
 - Leave `STREAMFORGE_TEAM_PASSWORD` empty for purely local use (no auth).
 
-**Exposing the host to remote operators.** Bind to the network and put it behind
-a secure tunnel rather than opening a raw port:
+**One command (recommended): `npm run share`.** On the production host, run:
+
+```bash
+STREAMFORGE_TEAM_PASSWORD=your-team-password npm run share
+```
+
+This builds the app, starts the server bound to all interfaces, opens a
+Cloudflare quick tunnel, and prints a public `https://<random>.trycloudflare.com`
+URL to share with the team — they open it from any network, enter the team
+password + a display name, and they're in. Press Ctrl+C to tear it all down.
+
+Requirements: [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+must be installed (`brew install cloudflared` / `winget install --id Cloudflare.cloudflared`).
+The command refuses to start unless `STREAMFORGE_TEAM_PASSWORD` is set, so the
+production is never exposed without auth.
+
+**Manual alternatives.** Bind to the network yourself and put it behind a tunnel:
 
 ```bash
 HOST=0.0.0.0 STREAMFORGE_TEAM_PASSWORD=your-team-password npm start
@@ -160,6 +175,7 @@ See `.env.example`. All values are optional.
 | `npm run dev`      | Run server + client + shared watch concurrently    |
 | `npm run build`    | Build all workspaces                               |
 | `npm start`        | Build, then serve the built client from the server |
+| `npm run share`    | Build + serve + open a Cloudflare tunnel to share  |
 | `npm run typecheck`| Type-check every workspace                          |
 | `npm run lint`     | Lint with ESLint                                    |
 
