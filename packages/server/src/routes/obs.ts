@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { obsService } from '../obs/obsService.js';
+import { wsHub } from '../realtime/wsHub.js';
+import { userFromRequest } from '../auth/auth.js';
 
 export const obsRouter = Router();
 
@@ -11,14 +13,18 @@ obsRouter.post('/api/obs/connect', async (req, res) => {
   const { url, password } = req.body ?? {};
   try {
     await obsService.connect(url, password);
+    const user = userFromRequest(req);
+    if (user) wsHub.logActivity(user, 'obsConnection', 'connected OBS');
     res.json(obsService.state());
   } catch (err) {
     res.status(502).json({ error: errMsg(err), state: obsService.state() });
   }
 });
 
-obsRouter.post('/api/obs/disconnect', async (_req, res) => {
+obsRouter.post('/api/obs/disconnect', async (req, res) => {
   await obsService.disconnect();
+  const user = userFromRequest(req);
+  if (user) wsHub.logActivity(user, 'obsConnection', 'disconnected OBS');
   res.json(obsService.state());
 });
 
@@ -42,6 +48,8 @@ obsRouter.post('/api/obs/scene', async (req, res) => {
       await obsService.setPreviewScene(sceneName);
     } else {
       await obsService.setProgramScene(sceneName);
+      const user = userFromRequest(req);
+      if (user) wsHub.logActivity(user, 'sceneSwitched', `switched to ${sceneName}`);
     }
     res.json(obsService.state());
   } catch (err) {

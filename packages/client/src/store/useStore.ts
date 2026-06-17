@@ -1,12 +1,17 @@
 import { create } from 'zustand';
 import type {
+  ActivityEvent,
   GsiPayload,
   GsiStatus,
   ObsState,
   Rig,
+  SessionUser,
 } from '@streamforge/shared';
 import { api } from '@/lib/api';
 import { RealtimeSocket } from '@/lib/socket';
+import { setSession } from '@/lib/auth';
+
+const ACTIVITY_CAP = 80;
 
 interface AppState {
   socketConnected: boolean;
@@ -15,10 +20,14 @@ interface AppState {
   obs: ObsState;
   rigs: Rig[];
   lastActivatedRigId: string | null;
+  me: SessionUser | null;
+  presence: SessionUser[];
+  activity: ActivityEvent[];
 
   init: () => void;
   refreshRigs: () => Promise<void>;
   refreshObs: () => Promise<void>;
+  setIdentity: (name: string, color: string) => void;
 }
 
 const emptyObs: ObsState = {
@@ -41,6 +50,9 @@ export const useStore = create<AppState>((set, get) => ({
   obs: emptyObs,
   rigs: [],
   lastActivatedRigId: null,
+  me: null,
+  presence: [],
+  activity: [],
 
   init: () => {
     if (socket) return;
@@ -61,6 +73,20 @@ export const useStore = create<AppState>((set, get) => ({
             break;
           case 'rigActivated':
             set({ lastActivatedRigId: msg.rigId });
+            break;
+          case 'hello':
+            if (msg.you) set({ me: msg.you });
+            break;
+          case 'presence':
+            set({ presence: msg.users });
+            break;
+          case 'activity':
+            set((s) => ({
+              activity: [...s.activity, msg.event].slice(-ACTIVITY_CAP),
+            }));
+            break;
+          case 'activityLog':
+            set({ activity: msg.events.slice(-ACTIVITY_CAP) });
             break;
           default:
             break;
@@ -91,5 +117,11 @@ export const useStore = create<AppState>((set, get) => ({
     } catch {
       // ignore
     }
+  },
+
+  setIdentity: (name, color) => {
+    setSession({ name, color });
+    socket?.identify();
+    set((s) => (s.me ? { me: { ...s.me, name, color } } : {}));
   },
 }));

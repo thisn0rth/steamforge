@@ -8,6 +8,8 @@ import { obsRouter } from './routes/obs.js';
 import { rigsRouter } from './routes/rigs.js';
 import { overlaysRouter } from './routes/overlays.js';
 import { transitionsRouter } from './routes/transitions.js';
+import { authRouter } from './routes/auth.js';
+import { requireAuth } from './auth/middleware.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -22,6 +24,12 @@ export function createApp(): express.Express {
     res.json({ ok: true, name: 'streamforge', time: Date.now() });
   });
 
+  // Auth endpoints are public; the GSI ingest uses its own token. Everything
+  // else under /api requires a session (loopback host is always trusted).
+  app.use(authRouter);
+  // POST /gsi (CS2 ingest) lives outside /api and keeps its own token, so it is
+  // unaffected by the team-auth guard mounted below.
+  app.use('/api', requireAuth);
   app.use(gsiRouter);
   app.use(obsRouter);
   app.use(rigsRouter);
