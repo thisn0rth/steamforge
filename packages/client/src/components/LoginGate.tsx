@@ -29,15 +29,15 @@ export function LoginGate({ children }: { children: ReactNode }) {
           setPhase('ready');
           return;
         }
-        // Auth required: a valid existing token lets us skip the form.
-        if (getToken()) {
-          try {
-            await api.me();
-            if (!cancelled) setPhase('ready');
-            return;
-          } catch {
-            setSession({ token: null });
-          }
+        // Auth required, but the server still trusts the production host
+        // (loopback) and valid tokens. Probe /api/auth/me: if it resolves we're
+        // already authorized (host or returning operator) and skip the form.
+        try {
+          await api.me();
+          if (!cancelled) setPhase('ready');
+          return;
+        } catch {
+          if (getToken()) setSession({ token: null });
         }
         if (!cancelled) setPhase('login');
       } catch {
