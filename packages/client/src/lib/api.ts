@@ -4,13 +4,24 @@ import type {
   ObsState,
   Overlay,
   Rig,
+  SessionUser,
   Transition,
 } from '@streamforge/shared';
+import { getColor, getName, getToken } from './auth';
 
 async function http<T>(url: string, init?: RequestInit): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    // Identify loopback/host requests so actions are attributed correctly.
+    'X-SF-Name': getName() || 'Host',
+    'X-SF-Color': getColor(),
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
     ...init,
+    headers,
   });
   if (!res.ok) {
     let detail = res.statusText;
@@ -27,6 +38,16 @@ async function http<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  // Auth
+  authConfig: () => http<{ authRequired: boolean }>('/api/auth/config'),
+  login: (password: string, name: string, color: string) =>
+    http<{ token: string; user: SessionUser }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ password, name, color }),
+    }),
+  me: () => http<{ user: SessionUser }>('/api/auth/me'),
+  logout: () => http<void>('/api/auth/logout', { method: 'POST' }),
+
   // GSI
   gsiStatus: () => http<GsiStatus>('/api/gsi/status'),
   gsiCurrent: () => http<GsiPayload | null>('/api/gsi/current'),

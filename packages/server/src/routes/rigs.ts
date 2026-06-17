@@ -4,6 +4,7 @@ import type { Rig } from '@streamforge/shared';
 import { store } from '../store/store.js';
 import { applyRig } from '../rigs/rigEngine.js';
 import { wsHub } from '../realtime/wsHub.js';
+import { userFromRequest } from '../auth/auth.js';
 
 export const rigsRouter = Router();
 
@@ -69,6 +70,10 @@ rigsRouter.post('/api/rigs/:id/activate', async (req, res) => {
   }
   const result = await applyRig(rig);
   wsHub.broadcast({ type: 'rigActivated', rigId: rig.id });
+  const user = userFromRequest(req);
+  if (user) {
+    wsHub.logActivity(user, 'rigActivated', `went live with ${rig.name}`);
+  }
   res.json(result);
 });
 

@@ -101,6 +101,54 @@ program scene — atomically from the operator's point of view.
 - **GSI bindings**: bind a text layer to a live data path such as
   `map.team_ct.score`, `player.state.health`, or `bomb.state`.
 
+## Multi-operator / remote teams
+
+StreamForge is built for a whole team to drive one production together. The
+server is the single source of truth (it talks to OBS and CS2); everyone else
+connects a browser to it and sees live updates over the WebSocket.
+
+**Identity & presence.** Each operator sets a display name and color (Settings →
+*Your identity*, or at the sign-in screen). The sidebar shows who's online, and
+the Control Surface has a live **activity feed** — "Alex went live with Main
+Camera", "Sam edited Scoreboard" — so the whole crew can see what's happening.
+
+**Auth.** Set a shared team password to gate remote access:
+
+```bash
+STREAMFORGE_TEAM_PASSWORD=your-team-password
+```
+
+- The **production host** (the machine running the server, OBS, and CS2) is
+  trusted automatically — loopback clients and OBS browser sources never see a
+  login prompt.
+- **Remote operators** hit a sign-in screen, enter the shared password plus a
+  display name/color, and get a session token that authorizes the API and the
+  live socket.
+- Leave `STREAMFORGE_TEAM_PASSWORD` empty for purely local use (no auth).
+
+**Exposing the host to remote operators.** Bind to the network and put it behind
+a secure tunnel rather than opening a raw port:
+
+```bash
+HOST=0.0.0.0 STREAMFORGE_TEAM_PASSWORD=your-team-password npm start
+```
+
+- **Cloudflare Tunnel** (public HTTPS URL, no port forwarding):
+
+  ```bash
+  cloudflared tunnel --url http://localhost:4500
+  ```
+
+  Share the generated `https://<random>.trycloudflare.com` URL with the team.
+  For a stable URL + SSO in front, use a named tunnel with Cloudflare Access.
+
+- **Tailscale** (private mesh VPN, best for a fixed crew): install Tailscale on
+  the host and each operator's machine, then reach the host at
+  `http://<host-tailscale-ip>:4500`.
+
+Always keep `STREAMFORGE_TEAM_PASSWORD` set whenever the server is reachable
+beyond localhost.
+
 ## Configuration
 
 See `.env.example`. All values are optional.

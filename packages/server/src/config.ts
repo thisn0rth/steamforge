@@ -15,6 +15,12 @@ export interface ServerConfig {
   dataDir: string;
   /** Token CS2 must include in its GSI config `auth.token`. Empty disables. */
   gsiAuthToken: string;
+  /**
+   * Shared password remote operators must enter to control the production.
+   * Empty disables team auth (pure local mode). Loopback clients on the
+   * production host are always trusted regardless of this setting.
+   */
+  teamPassword: string;
   /** Default OBS websocket connection. */
   obs: {
     url: string;
@@ -39,6 +45,7 @@ export const config: ServerConfig = {
   host: process.env.HOST ?? '127.0.0.1',
   dataDir,
   gsiAuthToken: process.env.STREAMFORGE_GSI_TOKEN ?? '',
+  teamPassword: process.env.STREAMFORGE_TEAM_PASSWORD ?? '',
   obs: {
     url: process.env.OBS_WS_URL ?? 'ws://127.0.0.1:4455',
     password: process.env.OBS_WS_PASSWORD ?? '',

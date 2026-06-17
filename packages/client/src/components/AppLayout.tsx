@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useStore } from '@/store/useStore';
+import { PresenceBar } from '@/components/PresenceBar';
 
 const NAV = [
   { to: '/', label: 'Control', icon: LayoutGrid, end: true },
@@ -64,6 +65,10 @@ export function AppLayout() {
             </NavLink>
           ))}
         </nav>
+
+        <div className="border-t border-ink-600 pt-2">
+          <PresenceBar />
+        </div>
 
         <div className="space-y-2 border-t border-ink-600 p-3 text-xs">
           <StatusRow

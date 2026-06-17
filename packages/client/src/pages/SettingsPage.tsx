@@ -1,13 +1,35 @@
 import { useEffect, useState } from 'react';
-import { Cable, CheckCircle2, Download, Plug, XCircle } from 'lucide-react';
+import { Cable, CheckCircle2, Download, LogOut, Plug, UserRound, XCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { PageHeader } from '@/components/PageHeader';
 import { api } from '@/lib/api';
 import { useStore } from '@/store/useStore';
+import { clearSession, getColor, getName, getToken } from '@/lib/auth';
+
+const PALETTE = ['#6c7bff', '#39d3c3', '#ff4d6d', '#f7b955', '#a78bfa', '#4ade80'];
 
 export function SettingsPage() {
   const obs = useStore((s) => s.obs);
   const refreshObs = useStore((s) => s.refreshObs);
+  const setIdentity = useStore((s) => s.setIdentity);
+  const [name, setName] = useState(getName());
+  const [color, setColor] = useState(getColor());
+  const [savedAt, setSavedAt] = useState(0);
+
+  function saveIdentity() {
+    setIdentity(name.trim() || 'Operator', color);
+    setSavedAt(Date.now());
+  }
+
+  async function logout() {
+    try {
+      await api.logout();
+    } catch {
+      // ignore network errors on logout
+    }
+    clearSession();
+    location.reload();
+  }
   const [url, setUrl] = useState('ws://127.0.0.1:4455');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -47,6 +69,53 @@ export function SettingsPage() {
       <PageHeader title="Settings" subtitle="Connect OBS and wire up Counter-Strike 2." />
 
       <div className="grid max-w-4xl grid-cols-1 gap-6 p-8">
+        {/* Identity */}
+        <section className="panel p-5">
+          <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <UserRound size={16} className="text-accent" /> Your identity
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Display name</label>
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Color</label>
+              <div className="flex h-[38px] items-center gap-2">
+                {PALETTE.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setColor(c)}
+                    aria-label={`color ${c}`}
+                    className="h-6 w-6 rounded-full"
+                    style={{
+                      background: c,
+                      outline: color === c ? '2px solid white' : 'none',
+                      outlineOffset: 2,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <button className="btn-primary" onClick={saveIdentity}>
+              Save identity
+            </button>
+            {savedAt > 0 && <span className="text-xs text-teal">Saved — teammates see it live.</span>}
+            {getToken() && (
+              <button className="btn-ghost ml-auto" onClick={() => void logout()}>
+                <LogOut size={15} /> Sign out
+              </button>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-text-faint">
+            This name and color identify your actions to the rest of the team in presence and the
+            activity feed.
+          </p>
+        </section>
+
         {/* OBS */}
         <section className="panel p-5">
           <div className="mb-4 flex items-center justify-between">

@@ -1,4 +1,5 @@
 import { WS_PATH, type ServerMessage } from '@streamforge/shared';
+import { getColor, getName, getToken } from './auth';
 
 export type ServerMessageHandler = (msg: ServerMessage) => void;
 
@@ -21,11 +22,23 @@ export class RealtimeSocket {
   connect(): void {
     this.closed = false;
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}${WS_PATH}`;
+    const params = new URLSearchParams();
+    const token = getToken();
+    if (token) params.set('token', token);
+    const name = getName();
+    if (name) params.set('name', name);
+    params.set('color', getColor());
+    const url = `${proto}://${location.host}${WS_PATH}?${params.toString()}`;
     const ws = new WebSocket(url);
     this.ws = ws;
 
-    ws.onopen = () => this.onStatus?.(true);
+    ws.onopen = () => {
+      this.onStatus?.(true);
+      // Refresh our identity (covers name/color changes after first connect).
+      ws.send(
+        JSON.stringify({ type: 'identify', name: getName() || 'Host', color: getColor() }),
+      );
+    };
     ws.onmessage = (event) => {
       try {
         this.handler(JSON.parse(event.data) as ServerMessage);
@@ -38,6 +51,15 @@ export class RealtimeSocket {
       if (!this.closed) this.scheduleReconnect();
     };
     ws.onerror = () => ws.close();
+  }
+
+  /** Push the current stored display name/color to the server live. */
+  identify(): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(
+        JSON.stringify({ type: 'identify', name: getName() || 'Host', color: getColor() }),
+      );
+    }
   }
 
   private scheduleReconnect(): void {

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import './index.css';
 import { AppLayout } from '@/components/AppLayout';
+import { LoginGate } from '@/components/LoginGate';
 import { ControlSurface } from '@/pages/ControlSurface';
 import { OverlaysPage } from '@/pages/OverlaysPage';
 import { EditorPage } from '@/pages/EditorPage';
@@ -13,7 +14,11 @@ import { OverlayRenderer } from '@/pages/OverlayRenderer';
 const router = createBrowserRouter([
   {
     path: '/',
-    element: <AppLayout />,
+    element: (
+      <LoginGate>
+        <AppLayout />
+      </LoginGate>
+    ),
     children: [
       { index: true, element: <ControlSurface /> },
       { path: 'overlays', element: <OverlaysPage /> },

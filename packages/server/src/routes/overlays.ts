@@ -4,8 +4,13 @@ import type { Overlay } from '@streamforge/shared';
 import { store } from '../store/store.js';
 import { wsHub } from '../realtime/wsHub.js';
 import { createBlankOverlay } from '../overlays/defaults.js';
+import { userFromRequest } from '../auth/auth.js';
 
 export const overlaysRouter = Router();
+
+// Overlays autosave frequently; coalesce edit activity per user+overlay.
+const EDIT_LOG_THROTTLE_MS = 60_000;
+const lastEditLog = new Map<string, number>();
 
 overlaysRouter.get('/api/overlays', (_req, res) => {
   res.json(store.overlays.all().sort((a, b) => b.updatedAt - a.updatedAt));
@@ -45,6 +50,16 @@ overlaysRouter.put('/api/overlays/:id', (req, res) => {
   };
   store.overlays.upsert(updated);
   wsHub.broadcast({ type: 'overlayUpdated', overlay: updated });
+
+  const user = userFromRequest(req);
+  if (user) {
+    const key = `${user.id}:${updated.id}`;
+    const now = Date.now();
+    if (now - (lastEditLog.get(key) ?? 0) > EDIT_LOG_THROTTLE_MS) {
+      lastEditLog.set(key, now);
+      wsHub.logActivity(user, 'overlayEdited', `edited ${updated.name}`);
+    }
+  }
   res.json(updated);
 });
 

@@ -7,6 +7,7 @@ import type { GsiPayload, GsiStatus } from './gsi.js';
 import type { ObsState } from './obs.js';
 import type { Overlay } from './overlay.js';
 import type { Rig } from './rig.js';
+import type { ActivityEvent, SessionUser } from './presence.js';
 
 /** Messages the server broadcasts to connected clients. */
 export type ServerMessage =
@@ -16,11 +17,15 @@ export type ServerMessage =
   | { type: 'rigActivated'; rigId: string }
   | { type: 'overlayUpdated'; overlay: Overlay }
   | { type: 'rigsUpdated'; rigs: Rig[] }
-  | { type: 'hello'; serverTime: number };
+  | { type: 'presence'; users: SessionUser[] }
+  | { type: 'activity'; event: ActivityEvent }
+  | { type: 'activityLog'; events: ActivityEvent[] }
+  | { type: 'hello'; serverTime: number; you: SessionUser | null };
 
 /** Messages a client can send to the server over the socket. */
 export type ClientMessage =
   | { type: 'subscribe'; channels: SocketChannel[] }
+  | { type: 'identify'; name: string; color: string }
   | { type: 'ping' };
 
 export type SocketChannel = 'gsi' | 'obs' | 'rigs' | 'overlays';

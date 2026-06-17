@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { wsHub } from './realtime/wsHub.js';
 import { gsiService } from './gsi/gsiService.js';
 import { obsService } from './obs/obsService.js';
+import { authEnabled } from './auth/auth.js';
 
 const app = createApp();
 const server = http.createServer(app);
@@ -18,7 +19,7 @@ obsService.on('state', (state) => wsHub.broadcast({ type: 'obsState', state }));
 server.listen(config.port, config.host, () => {
   // eslint-disable-next-line no-console
   console.log(
-    `\n  StreamForge server\n  ▸ control UI / API : http://${config.host}:${config.port}\n  ▸ CS2 GSI endpoint : http://${config.host}:${config.port}/gsi\n  ▸ OBS websocket    : ${config.obs.url} (autoConnect=${config.obs.autoConnect})\n`,
+    `\n  StreamForge server\n  ▸ control UI / API : http://${config.host}:${config.port}\n  ▸ CS2 GSI endpoint : http://${config.host}:${config.port}/gsi\n  ▸ OBS websocket    : ${config.obs.url} (autoConnect=${config.obs.autoConnect})\n  ▸ team auth        : ${authEnabled() ? 'ON (remote operators need the team password)' : 'OFF (local only — set STREAMFORGE_TEAM_PASSWORD for remote access)'}\n`,
   );
 
   if (config.obs.autoConnect) {
