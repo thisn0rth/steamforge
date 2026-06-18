@@ -10,10 +10,14 @@ export function SceneSwitcher() {
   const refreshObs = useStore((s) => s.refreshObs);
   const [busy, setBusy] = useState<string | null>(null);
 
-  async function switchScene(name: string) {
+  const studio = obs.studioModeEnabled;
+
+  async function pickScene(name: string) {
     setBusy(name);
     try {
-      await api.obsSetScene(name);
+      // In Studio Mode a click stages the scene in Preview; otherwise it cuts
+      // straight to Program.
+      await api.obsSetScene(name, studio);
       await refreshObs();
     } catch {
       // surfaced via OBS state error
@@ -27,7 +31,10 @@ export function SceneSwitcher() {
       <header className="flex items-center justify-between border-b border-ink-600 px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <MonitorPlay size={16} className="text-accent" />
-          OBS Scenes
+          Scenes
+          <span className="text-xs font-normal text-text-faint">
+            {studio ? 'click to preview' : 'click to cut live'}
+          </span>
         </div>
         <button
           className="text-text-faint transition hover:text-text"
@@ -47,28 +54,37 @@ export function SceneSwitcher() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2 p-3">
+        <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3">
           {obs.scenes.map((scene) => {
             const isProgram = scene.name === obs.currentProgramScene;
+            const isPreview = studio && scene.name === obs.currentPreviewScene;
             return (
               <button
                 key={scene.name}
-                onClick={() => void switchScene(scene.name)}
+                onClick={() => void pickScene(scene.name)}
                 disabled={busy === scene.name}
                 className={clsx(
                   'group relative flex h-20 flex-col justify-between rounded-lg border p-3 text-left transition',
                   isProgram
-                    ? 'border-live/60 bg-live/10 shadow-[inset_0_0_0_1px_rgba(255,77,109,0.4)]'
-                    : 'border-ink-600 bg-ink-750 hover:border-accent/50 hover:bg-ink-700',
+                    ? 'border-live/60 bg-live/10'
+                    : isPreview
+                      ? 'border-preview/60 bg-preview/10'
+                      : 'border-ink-600 bg-ink-750 hover:border-accent/50 hover:bg-ink-700',
                 )}
               >
                 <span className="truncate text-sm font-medium">{scene.name}</span>
                 <span className="flex items-center justify-between text-[10px] uppercase tracking-wide text-text-faint">
-                  <span>{scene.items.length} sources</span>
+                  <span>{scene.items.length} src</span>
                   {isProgram && (
                     <span className="flex items-center gap-1 font-semibold text-live">
                       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-live" />
                       live
+                    </span>
+                  )}
+                  {isPreview && (
+                    <span className="flex items-center gap-1 font-semibold text-preview">
+                      <span className="h-1.5 w-1.5 rounded-full bg-preview" />
+                      prev
                     </span>
                   )}
                 </span>
@@ -76,7 +92,7 @@ export function SceneSwitcher() {
             );
           })}
           {obs.scenes.length === 0 && (
-            <p className="col-span-2 py-6 text-center text-sm text-text-faint">
+            <p className="col-span-full py-6 text-center text-sm text-text-faint">
               No scenes found in OBS.
             </p>
           )}
