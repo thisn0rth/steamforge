@@ -66,6 +66,9 @@ body {
   .chip {
     @apply inline-flex items-center gap-1.5 rounded-full border border-ink-600 bg-ink-750 px-2.5 py-1 text-xs font-medium text-text-muted;
   }
+  .icon-btn {
+    @apply flex h-7 w-7 items-center justify-center rounded-md border border-ink-600 bg-ink-750 text-text-faint transition hover:text-text disabled:cursor-not-allowed disabled:opacity-40;
+  }
 }
 
 /* Subtle animated glow used on the brand mark / live badges. */

@@ -4,7 +4,9 @@ import { config } from './config.js';
 import { wsHub } from './realtime/wsHub.js';
 import { gsiService } from './gsi/gsiService.js';
 import { obsService } from './obs/obsService.js';
+import { replayService } from './replays/replayService.js';
 import { authEnabled } from './auth/auth.js';
+import type { Replay, ReplaySettings } from '@streamforge/shared';
 
 const app = createApp();
 const server = http.createServer(app);
@@ -23,6 +25,24 @@ obsService.on('frame', (frame) =>
     ts: frame.ts,
   }),
 );
+
+replayService.init();
+// Seed the cached snapshot so freshly-connected clients get current replays.
+{
+  const snap = replayService.snapshot();
+  wsHub.broadcast({ type: 'replays', replays: snap.replays, settings: snap.settings });
+}
+replayService.on('replays', (snapshot: { replays: Replay[]; settings: ReplaySettings }) =>
+  wsHub.broadcast({ type: 'replays', replays: snapshot.replays, settings: snapshot.settings }),
+);
+replayService.on('saved', (replay: Replay) => {
+  const who = replay.triggeredBy ?? 'OBS hotkey';
+  wsHub.logActivity(
+    { id: 'replay', name: who, color: '#9aa3b2', host: true },
+    'replaySaved',
+    `saved a replay (${replay.name})`,
+  );
+});
 
 server.listen(config.port, config.host, () => {
   // eslint-disable-next-line no-console
