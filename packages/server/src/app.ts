@@ -9,6 +9,9 @@ import { rigsRouter } from './routes/rigs.js';
 import { overlaysRouter } from './routes/overlays.js';
 import { transitionsRouter } from './routes/transitions.js';
 import { replaysRouter } from './routes/replays.js';
+import { assetsRouter, assetsDir } from './routes/assets.js';
+import { leagueRouter } from './routes/league.js';
+import { assignmentsRouter } from './routes/assignments.js';
 import { authRouter } from './routes/auth.js';
 import { requireAuth } from './auth/middleware.js';
 import { dataPath } from './config.js';
@@ -38,11 +41,17 @@ export function createApp(): express.Express {
   app.use(overlaysRouter);
   app.use(transitionsRouter);
   app.use(replaysRouter);
+  app.use(assetsRouter);
+  app.use(leagueRouter);
+  app.use(assignmentsRouter);
 
   // Saved replay clips are served as static media for the UI and OBS.
   const replaysDir = dataPath('replays');
   fs.mkdirSync(replaysDir, { recursive: true });
   app.use('/replays', express.static(replaysDir));
+
+  // Uploaded image assets (overlay media) are served statically.
+  app.use('/assets', express.static(assetsDir));
 
   // In production, serve the built client (control UI + overlay renderer).
   // dist layout: packages/server/dist/app.js -> ../../client/dist

@@ -1,8 +1,11 @@
 import type {
+  Asset,
   GsiPayload,
   GsiStatus,
+  LeagueData,
   ObsState,
   Overlay,
+  OverlayAssignments,
   Replay,
   ReplaySettings,
   Rig,
@@ -104,6 +107,42 @@ export const api = {
   updateOverlay: (id: string, overlay: Partial<Overlay>) =>
     http<Overlay>(`/api/overlays/${id}`, { method: 'PUT', body: JSON.stringify(overlay) }),
   deleteOverlay: (id: string) => http<void>(`/api/overlays/${id}`, { method: 'DELETE' }),
+
+  // Assets (overlay media library)
+  assets: () => http<Asset[]>('/api/assets'),
+  uploadAsset: async (file: File): Promise<Asset> => {
+    const token = getToken();
+    const form = new FormData();
+    form.append('file', file);
+    // No explicit Content-Type: the browser sets the multipart boundary.
+    const headers: Record<string, string> = {
+      'X-SF-Name': getName() || 'Host',
+      'X-SF-Color': getColor(),
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch('/api/assets', { method: 'POST', headers, body: form });
+    if (!res.ok) {
+      let detail = res.statusText;
+      try {
+        detail = (await res.json()).error ?? detail;
+      } catch {
+        // ignore
+      }
+      throw new Error(`${res.status}: ${detail}`);
+    }
+    return (await res.json()) as Asset;
+  },
+  deleteAsset: (id: string) => http<void>(`/api/assets/${id}`, { method: 'DELETE' }),
+
+  // League data (Firestore mirror) + overlay slot assignments
+  league: () => http<LeagueData>('/api/league'),
+  refreshLeague: () => http<LeagueData>('/api/league/refresh', { method: 'POST' }),
+  assignments: () => http<Record<string, OverlayAssignments>>('/api/assignments'),
+  setAssignments: (overlayId: string, assignments: OverlayAssignments) =>
+    http<{ ok: true }>(`/api/overlays/${overlayId}/assignments`, {
+      method: 'PUT',
+      body: JSON.stringify({ assignments }),
+    }),
 
   // Replays
   replays: () => http<{ replays: Replay[]; settings: ReplaySettings }>('/api/replays'),

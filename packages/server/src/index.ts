@@ -5,6 +5,7 @@ import { wsHub } from './realtime/wsHub.js';
 import { gsiService } from './gsi/gsiService.js';
 import { obsService } from './obs/obsService.js';
 import { replayService } from './replays/replayService.js';
+import { leagueService } from './league/leagueService.js';
 import { authEnabled } from './auth/auth.js';
 import type { Replay, ReplaySettings } from '@streamforge/shared';
 
@@ -35,6 +36,10 @@ replayService.init();
 replayService.on('replays', (snapshot: { replays: Replay[]; settings: ReplaySettings }) =>
   wsHub.broadcast({ type: 'replays', replays: snapshot.replays, settings: snapshot.settings }),
 );
+// League data (Firestore mirror). Inert when no credentials are configured.
+leagueService.init();
+leagueService.on('league', (league) => wsHub.broadcast({ type: 'league', league }));
+
 replayService.on('saved', (replay: Replay) => {
   const who = replay.triggeredBy ?? 'OBS hotkey';
   wsHub.logActivity(

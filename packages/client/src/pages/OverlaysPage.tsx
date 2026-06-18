@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Copy, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Copy, Crosshair, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { Overlay } from '@streamforge/shared';
 import { PageHeader } from '@/components/PageHeader';
+import { Modal } from '@/components/Modal';
+import { FocusControls } from '@/components/FocusControls';
 import { api } from '@/lib/api';
 import { OverlayCanvas } from '@/overlay/OverlayCanvas';
 
 export function OverlaysPage() {
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [creating, setCreating] = useState(false);
+  const [focusOverlay, setFocusOverlay] = useState<Overlay | null>(null);
 
   async function load() {
     setOverlays(await api.overlays());
@@ -66,6 +69,15 @@ export function OverlaysPage() {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {o.slots && o.slots.length > 0 && (
+                  <button
+                    className="rounded-md p-2 text-text-faint hover:bg-ink-700 hover:text-accent"
+                    title="Set focus (assign players/teams to slots)"
+                    onClick={() => setFocusOverlay(o)}
+                  >
+                    <Crosshair size={15} />
+                  </button>
+                )}
                 <button
                   className="rounded-md p-2 text-text-faint hover:bg-ink-700 hover:text-text"
                   title="Copy browser-source URL"
@@ -100,6 +112,14 @@ export function OverlaysPage() {
           <span className="text-sm font-medium">Create overlay</span>
         </button>
       </div>
+
+      <Modal
+        open={focusOverlay != null}
+        title={focusOverlay ? `Focus · ${focusOverlay.name}` : 'Focus'}
+        onClose={() => setFocusOverlay(null)}
+      >
+        {focusOverlay && <FocusControls overlay={focusOverlay} />}
+      </Modal>
     </div>
   );
 }

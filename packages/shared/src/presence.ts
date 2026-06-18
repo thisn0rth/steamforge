@@ -19,7 +19,8 @@ export type ActivityKind =
   | 'sceneSwitched'
   | 'overlayEdited'
   | 'obsConnection'
-  | 'replaySaved';
+  | 'replaySaved'
+  | 'assetUploaded';
 
 export interface ActivityEvent {
   id: string;

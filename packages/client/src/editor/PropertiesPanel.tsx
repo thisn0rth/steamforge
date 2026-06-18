@@ -1,8 +1,10 @@
 import { Diamond } from 'lucide-react';
 import clsx from 'clsx';
-import type { Layer, LayerTransform } from '@streamforge/shared';
+import type { Layer, LayerTransform, OverlaySlot } from '@streamforge/shared';
 import { numAt } from '@/overlay/evaluate';
 import { setTransformValue, TRANSFORM_KEYS } from './editorOps';
+import { MediaPicker } from './MediaPicker';
+import { GsiBindingFields } from './GsiBindingFields';
 
 const TRANSFORM_LABELS: Record<keyof LayerTransform, string> = {
   x: 'X',
@@ -17,11 +19,13 @@ const TRANSFORM_LABELS: Record<keyof LayerTransform, string> = {
 export function PropertiesPanel({
   layer,
   time,
+  slots,
   onChange,
   onToggleKeyframe,
 }: {
   layer: Layer | null;
   time: number;
+  slots: OverlaySlot[];
   onChange: (layer: Layer) => void;
   onToggleKeyframe: (key: keyof LayerTransform) => void;
 }) {
@@ -172,41 +176,11 @@ export function PropertiesPanel({
 
         {layer.type === 'gsiText' && layer.binding && (
           <Section title="GSI Binding">
-            <Field label="Data path">
-              <input
-                className="input font-mono text-xs"
-                value={layer.binding.path}
-                placeholder="map.team_ct.score"
-                onChange={(e) =>
-                  patch({ binding: { ...layer.binding!, path: e.target.value } })
-                }
-              />
-            </Field>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Template">
-                <input
-                  className="input"
-                  value={layer.binding.template ?? ''}
-                  placeholder="{value}"
-                  onChange={(e) =>
-                    patch({ binding: { ...layer.binding!, template: e.target.value } })
-                  }
-                />
-              </Field>
-              <Field label="Fallback">
-                <input
-                  className="input"
-                  value={layer.binding.fallback ?? ''}
-                  onChange={(e) =>
-                    patch({ binding: { ...layer.binding!, fallback: e.target.value } })
-                  }
-                />
-              </Field>
-            </div>
-            <p className="mt-1 text-[11px] text-text-faint">
-              e.g. <code>map.team_t.score</code>, <code>player.state.health</code>,{' '}
-              <code>bomb.state</code>
-            </p>
+            <GsiBindingFields
+              binding={layer.binding}
+              slots={slots}
+              onChange={(binding) => patch({ binding })}
+            />
           </Section>
         )}
 
@@ -261,11 +235,17 @@ export function PropertiesPanel({
 
         {layer.type === 'image' && layer.image && (
           <Section title="Image">
+            <Field label="Media">
+              <MediaPicker
+                value={layer.image.src}
+                onSelect={(url) => patch({ image: { ...layer.image!, src: url } })}
+              />
+            </Field>
             <Field label="Source URL">
               <input
                 className="input"
                 value={layer.image.src}
-                placeholder="https://… or /asset.png"
+                placeholder="https://… or /assets/…"
                 onChange={(e) => patch({ image: { ...layer.image!, src: e.target.value } })}
               />
             </Field>

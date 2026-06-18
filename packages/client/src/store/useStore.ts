@@ -1,14 +1,18 @@
 import { create } from 'zustand';
 import type {
   ActivityEvent,
+  Asset,
   GsiPayload,
   GsiStatus,
+  LeagueData,
   ObsState,
+  OverlayAssignments,
   Replay,
   ReplaySettings,
   Rig,
   SessionUser,
 } from '@streamforge/shared';
+import { EMPTY_LEAGUE_DATA } from '@streamforge/shared';
 import { api } from '@/lib/api';
 import { RealtimeSocket } from '@/lib/socket';
 import { setSession } from '@/lib/auth';
@@ -29,10 +33,14 @@ interface AppState {
   previewFrame: string | null;
   replays: Replay[];
   replaySettings: ReplaySettings;
+  assets: Asset[];
+  league: LeagueData;
+  assignments: Record<string, OverlayAssignments>;
 
   init: () => void;
   refreshRigs: () => Promise<void>;
   refreshObs: () => Promise<void>;
+  refreshAssets: () => Promise<void>;
   setIdentity: (name: string, color: string) => void;
 }
 
@@ -67,6 +75,9 @@ export const useStore = create<AppState>((set, get) => ({
   previewFrame: null,
   replays: [],
   replaySettings: { playerSource: null, autoLoad: true },
+  assets: [],
+  league: EMPTY_LEAGUE_DATA,
+  assignments: {},
 
   init: () => {
     if (socket) return;
@@ -116,6 +127,15 @@ export const useStore = create<AppState>((set, get) => ({
           case 'replays':
             set({ replays: msg.replays, replaySettings: msg.settings });
             break;
+          case 'assets':
+            set({ assets: msg.assets });
+            break;
+          case 'league':
+            set({ league: msg.league });
+            break;
+          case 'assignments':
+            set({ assignments: msg.assignments });
+            break;
           default:
             break;
         }
@@ -133,6 +153,9 @@ export const useStore = create<AppState>((set, get) => ({
       .replays()
       .then((r) => set({ replays: r.replays, replaySettings: r.settings }))
       .catch(() => undefined);
+    void get().refreshAssets();
+    api.league().then((l) => set({ league: l })).catch(() => undefined);
+    api.assignments().then((a) => set({ assignments: a })).catch(() => undefined);
   },
 
   refreshRigs: async () => {
@@ -146,6 +169,14 @@ export const useStore = create<AppState>((set, get) => ({
   refreshObs: async () => {
     try {
       set({ obs: await api.obsState() });
+    } catch {
+      // ignore
+    }
+  },
+
+  refreshAssets: async () => {
+    try {
+      set({ assets: await api.assets() });
     } catch {
       // ignore
     }
