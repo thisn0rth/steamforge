@@ -13,6 +13,8 @@ export function BroadcastMonitors() {
   const obs = useStore((s) => s.obs);
   const [busy, setBusy] = useState(false);
 
+  const programFrame = useStore((s) => s.programFrame);
+  const previewFrame = useStore((s) => s.previewFrame);
   const programScene = obs.scenes.find((s) => s.name === obs.currentProgramScene);
   const previewScene = obs.scenes.find((s) => s.name === obs.currentPreviewScene);
   const studio = obs.studioModeEnabled;
@@ -54,6 +56,7 @@ export function BroadcastMonitors() {
         kind="program"
         sceneName={obs.currentProgramScene}
         sourceCount={programScene?.items.length ?? 0}
+        frame={programFrame}
       />
 
       <div className="flex flex-row items-center justify-center gap-3 lg:flex-col">
@@ -90,6 +93,7 @@ export function BroadcastMonitors() {
         kind="preview"
         sceneName={obs.currentPreviewScene}
         sourceCount={previewScene?.items.length ?? 0}
+        frame={studio ? previewFrame : null}
         hint={!studio ? 'Studio Mode off' : undefined}
       />
     </section>
@@ -100,11 +104,13 @@ function Monitor({
   kind,
   sceneName,
   sourceCount,
+  frame,
   hint,
 }: {
   kind: 'program' | 'preview';
   sceneName: string | null;
   sourceCount: number;
+  frame: string | null;
   hint?: string;
 }) {
   const isProgram = kind === 'program';
@@ -117,7 +123,18 @@ function Monitor({
           : 'border-preview/50 bg-preview/[0.05]',
       )}
     >
-      <div className="flex items-center justify-between">
+      {frame ? (
+        <img
+          src={frame}
+          alt={`${kind} output`}
+          className="pointer-events-none absolute inset-0 h-full w-full bg-black object-contain"
+        />
+      ) : (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 text-xs text-text-faint">
+          {isProgram ? 'awaiting program feed…' : hint ?? 'awaiting preview…'}
+        </div>
+      )}
+      <div className="relative flex items-center justify-between">
         <span
           className={clsx(
             'flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-bold uppercase tracking-widest',
@@ -135,12 +152,19 @@ function Monitor({
         {hint && <span className="text-[11px] text-text-faint">{hint}</span>}
       </div>
 
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.5] bg-grid-faint"
-        style={{ backgroundSize: '28px 28px' }}
-      />
+      {!frame && (
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.5] bg-grid-faint"
+          style={{ backgroundSize: '28px 28px' }}
+        />
+      )}
 
-      <div className="relative">
+      <div
+        className={clsx(
+          'relative -mx-4 -mb-4 mt-auto px-4 pb-3 pt-6',
+          frame && 'bg-gradient-to-t from-black/80 to-transparent',
+        )}
+      >
         <div className="truncate text-2xl font-bold tracking-tight">
           {sceneName ?? <span className="text-text-faint">no scene</span>}
         </div>

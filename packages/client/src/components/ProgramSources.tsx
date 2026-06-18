@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { Eye, EyeOff, Layers } from 'lucide-react';
+import { Eye, EyeOff, Layers, Search } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { api } from '@/lib/api';
 
@@ -8,8 +8,15 @@ import { api } from '@/lib/api';
 export function ProgramSources() {
   const obs = useStore((s) => s.obs);
   const [busy, setBusy] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   const scene = obs.scenes.find((s) => s.name === obs.currentProgramScene);
+  const items = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const all = scene?.items ?? [];
+    if (!q) return all;
+    return all.filter((i) => i.sourceName.toLowerCase().includes(q));
+  }, [scene, query]);
 
   async function toggle(sourceName: string, enabled: boolean) {
     if (!scene) return;
@@ -35,15 +42,34 @@ export function ProgramSources() {
         </span>
       </header>
 
+      {obs.connected && scene && (scene.items.length > 8 || query !== '') && (
+        <div className="relative border-b border-ink-600 px-3 py-2">
+          <Search
+            size={13}
+            className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-text-faint"
+          />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search sources…"
+            className="input w-full py-1.5 pl-7 pr-2 text-xs"
+          />
+        </div>
+      )}
+
       {!obs.connected || !scene ? (
         <p className="px-4 py-8 text-center text-sm text-text-faint">
           {obs.connected ? 'No program scene selected.' : 'OBS not connected.'}
         </p>
       ) : scene.items.length === 0 ? (
         <p className="px-4 py-8 text-center text-sm text-text-faint">No sources in this scene.</p>
+      ) : items.length === 0 ? (
+        <p className="px-4 py-8 text-center text-sm text-text-faint">
+          No sources match “{query}”.
+        </p>
       ) : (
-        <ul className="divide-y divide-ink-600/60">
-          {scene.items.map((item) => (
+        <ul className="max-h-[20rem] divide-y divide-ink-600/60 overflow-y-auto">
+          {items.map((item) => (
             <li
               key={item.sceneItemId}
               className="flex items-center justify-between gap-3 px-4 py-2.5"

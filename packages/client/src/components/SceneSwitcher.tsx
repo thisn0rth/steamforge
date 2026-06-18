@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { MonitorPlay, RefreshCw, Cable } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { MonitorPlay, RefreshCw, Cable, Search } from 'lucide-react';
 import clsx from 'clsx';
 import { Link } from 'react-router-dom';
 import { useStore } from '@/store/useStore';
@@ -9,8 +9,15 @@ export function SceneSwitcher() {
   const obs = useStore((s) => s.obs);
   const refreshObs = useStore((s) => s.refreshObs);
   const [busy, setBusy] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   const studio = obs.studioModeEnabled;
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return obs.scenes;
+    return obs.scenes.filter((s) => s.name.toLowerCase().includes(q));
+  }, [obs.scenes, query]);
 
   async function pickScene(name: string) {
     setBusy(name);
@@ -32,17 +39,36 @@ export function SceneSwitcher() {
         <div className="flex items-center gap-2 text-sm font-semibold">
           <MonitorPlay size={16} className="text-accent" />
           Scenes
+          <span className="rounded-full bg-ink-700 px-2 py-0.5 text-[10px] font-medium text-text-muted">
+            {obs.scenes.length}
+          </span>
           <span className="text-xs font-normal text-text-faint">
             {studio ? 'click to preview' : 'click to cut live'}
           </span>
         </div>
-        <button
-          className="text-text-faint transition hover:text-text"
-          onClick={() => void refreshObs()}
-          title="Refresh"
-        >
-          <RefreshCw size={14} />
-        </button>
+        <div className="flex items-center gap-2">
+          {obs.connected && (
+            <div className="relative">
+              <Search
+                size={13}
+                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-faint"
+              />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search scenes…"
+                className="input w-40 py-1.5 pl-7 pr-2 text-xs"
+              />
+            </div>
+          )}
+          <button
+            className="text-text-faint transition hover:text-text"
+            onClick={() => void refreshObs()}
+            title="Refresh"
+          >
+            <RefreshCw size={14} />
+          </button>
+        </div>
       </header>
 
       {!obs.connected ? (
@@ -54,8 +80,8 @@ export function SceneSwitcher() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3">
-          {obs.scenes.map((scene) => {
+        <div className="grid max-h-[22rem] grid-cols-2 gap-2 overflow-y-auto p-3 sm:grid-cols-3 lg:grid-cols-4">
+          {filtered.map((scene) => {
             const isProgram = scene.name === obs.currentProgramScene;
             const isPreview = studio && scene.name === obs.currentPreviewScene;
             return (
@@ -91,9 +117,11 @@ export function SceneSwitcher() {
               </button>
             );
           })}
-          {obs.scenes.length === 0 && (
+          {filtered.length === 0 && (
             <p className="col-span-full py-6 text-center text-sm text-text-faint">
-              No scenes found in OBS.
+              {obs.scenes.length === 0
+                ? 'No scenes found in OBS.'
+                : `No scenes match “${query}”.`}
             </p>
           )}
         </div>

@@ -15,6 +15,14 @@ wsHub.attach(server);
 gsiService.on('payload', (payload) => wsHub.broadcast({ type: 'gsi', payload }));
 gsiService.on('status', (status) => wsHub.broadcast({ type: 'gsiStatus', status }));
 obsService.on('state', (state) => wsHub.broadcast({ type: 'obsState', state }));
+obsService.on('frame', (frame) =>
+  wsHub.broadcast({
+    type: 'obsFrame',
+    channel: frame.channel,
+    dataUrl: frame.dataUrl,
+    ts: frame.ts,
+  }),
+);
 
 server.listen(config.port, config.host, () => {
   // eslint-disable-next-line no-console

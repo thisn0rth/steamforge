@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Pencil, Plus, Zap } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Pencil, Plus, Search, Zap } from 'lucide-react';
 import clsx from 'clsx';
 import type { Rig } from '@streamforge/shared';
 import { useStore } from '@/store/useStore';
@@ -14,6 +14,17 @@ export function RigGrid() {
   const [creating, setCreating] = useState(false);
   const [activating, setActivating] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rigs;
+    return rigs.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        (r.targetScene ?? '').toLowerCase().includes(q),
+    );
+  }, [rigs, query]);
 
   async function activate(rig: Rig) {
     setActivating(rig.id);
@@ -34,13 +45,27 @@ export function RigGrid() {
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Zap size={16} className="text-accent" />
           Rigs
-          <span className="text-xs font-normal text-text-faint">
-            one-click scene + overlay presets
+          <span className="rounded-full bg-ink-700 px-2 py-0.5 text-[10px] font-medium text-text-muted">
+            {rigs.length}
           </span>
         </div>
-        <button className="btn-ghost py-1.5" onClick={() => setCreating(true)}>
-          <Plus size={14} /> New rig
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search
+              size={13}
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-faint"
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search rigs…"
+              className="input w-40 py-1.5 pl-7 pr-2 text-xs"
+            />
+          </div>
+          <button className="btn-ghost py-1.5" onClick={() => setCreating(true)}>
+            <Plus size={14} /> New rig
+          </button>
+        </div>
       </header>
 
       {warning && (
@@ -49,8 +74,8 @@ export function RigGrid() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4">
-        {rigs.map((rig) => {
+      <div className="grid max-h-[22rem] grid-cols-2 gap-3 overflow-y-auto p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        {filtered.map((rig) => {
           const isLast = rig.id === lastActivated;
           return (
             <div key={rig.id} className="group relative">
@@ -100,13 +125,21 @@ export function RigGrid() {
           );
         })}
 
-        <button
-          onClick={() => setCreating(true)}
-          className="flex h-28 flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-ink-500 text-text-faint transition hover:border-accent/60 hover:text-text"
-        >
-          <Plus size={20} />
-          <span className="text-xs font-medium">Create rig</span>
-        </button>
+        {query.trim() === '' && (
+          <button
+            onClick={() => setCreating(true)}
+            className="flex h-28 flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-ink-500 text-text-faint transition hover:border-accent/60 hover:text-text"
+          >
+            <Plus size={20} />
+            <span className="text-xs font-medium">Create rig</span>
+          </button>
+        )}
+
+        {filtered.length === 0 && query.trim() !== '' && (
+          <p className="col-span-full py-8 text-center text-sm text-text-faint">
+            No rigs match “{query}”.
+          </p>
+        )}
       </div>
 
       {(creating || editing) && (

@@ -20,7 +20,11 @@ export type ServerMessage =
   | { type: 'presence'; users: SessionUser[] }
   | { type: 'activity'; event: ActivityEvent }
   | { type: 'activityLog'; events: ActivityEvent[] }
+  | { type: 'obsFrame'; channel: ObsFrameChannel; dataUrl: string | null; ts: number }
   | { type: 'hello'; serverTime: number; you: SessionUser | null };
+
+/** Which monitor a pushed video frame belongs to. */
+export type ObsFrameChannel = 'program' | 'preview';
 
 /** Messages a client can send to the server over the socket. */
 export type ClientMessage =
