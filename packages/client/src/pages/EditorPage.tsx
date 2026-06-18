@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Copy, Pause, Play, Save, SkipBack } from 'lucide-react';
-import type { Layer, LayerTransform, LayerType, Overlay } from '@streamforge/shared';
+import { ArrowLeft, Copy, Layers as LayersIcon, Pause, Play, Save, SkipBack } from 'lucide-react';
+import type { Layer, LayerTransform, LayerType, Overlay, OverlaySlot } from '@streamforge/shared';
 import { api } from '@/lib/api';
 import { useStore } from '@/store/useStore';
 import { EditorCanvas } from '@/editor/EditorCanvas';
 import { LayersPanel } from '@/editor/LayersPanel';
 import { PropertiesPanel } from '@/editor/PropertiesPanel';
 import { Timeline } from '@/editor/Timeline';
+import { SlotsModal } from '@/editor/SlotsModal';
 import { numAt } from '@/overlay/evaluate';
 import {
   addLayer,
@@ -27,6 +28,7 @@ export function EditorPage() {
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [slotsOpen, setSlotsOpen] = useState(false);
   const playStartRef = useRef(0);
   const playFromRef = useRef(0);
   const loadedRef = useRef(false);
@@ -131,6 +133,18 @@ export function EditorPage() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          <button
+            className="btn-ghost py-1.5"
+            onClick={() => setSlotsOpen(true)}
+            title="Manage data slots (focus roles)"
+          >
+            <LayersIcon size={14} /> Slots
+            {overlay.slots && overlay.slots.length > 0 && (
+              <span className="ml-1 rounded bg-ink-700 px-1.5 text-[11px]">
+                {overlay.slots.length}
+              </span>
+            )}
+          </button>
           <span className="text-xs text-text-faint">
             {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : ''}
           </span>
@@ -182,11 +196,19 @@ export function EditorPage() {
           <PropertiesPanel
             layer={selectedLayer}
             time={time}
+            slots={overlay.slots ?? []}
             onChange={updateLayer}
             onToggleKeyframe={handleToggleKeyframe}
           />
         </div>
       </div>
+
+      <SlotsModal
+        open={slotsOpen}
+        slots={overlay.slots ?? []}
+        onClose={() => setSlotsOpen(false)}
+        onChange={(slots: OverlaySlot[]) => setOverlay({ ...overlay, slots })}
+      />
 
       {/* Timeline */}
       <div className="h-48 shrink-0 border-t border-ink-600 bg-ink-850">

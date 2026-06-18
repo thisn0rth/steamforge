@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import type { GsiPayload, Overlay } from '@streamforge/shared';
+import type {
+  GsiPayload,
+  LeagueData,
+  Overlay,
+  OverlayAssignments,
+} from '@streamforge/shared';
 import { api } from '@/lib/api';
 import { RealtimeSocket } from '@/lib/socket';
 import { OverlayCanvas } from '@/overlay/OverlayCanvas';
@@ -15,6 +20,8 @@ export function OverlayRenderer() {
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [gsi, setGsi] = useState<GsiPayload | null>(null);
+  const [league, setLeague] = useState<LeagueData | null>(null);
+  const [assignments, setAssignments] = useState<OverlayAssignments | undefined>(undefined);
   const [time, setTime] = useState(0);
   const [scale, setScale] = useState(1);
   const startRef = useRef<number>(performance.now());
@@ -27,9 +34,13 @@ export function OverlayRenderer() {
     const socket = new RealtimeSocket((msg) => {
       if (msg.type === 'gsi') setGsi(msg.payload);
       if (msg.type === 'overlayUpdated' && msg.overlay.id === id) setOverlay(msg.overlay);
+      if (msg.type === 'league') setLeague(msg.league);
+      if (msg.type === 'assignments') setAssignments(msg.assignments[id]);
     });
     socket.connect();
     api.gsiCurrent().then((g) => g && setGsi(g)).catch(() => undefined);
+    api.league().then(setLeague).catch(() => undefined);
+    api.assignments().then((a) => setAssignments(a[id])).catch(() => undefined);
     return () => socket.close();
   }, [id]);
 
@@ -75,7 +86,14 @@ export function OverlayRenderer() {
         justifyContent: 'flex-start',
       }}
     >
-      <OverlayCanvas overlay={overlay} timeMs={time} gsi={gsi} scale={scale} />
+      <OverlayCanvas
+        overlay={overlay}
+        timeMs={time}
+        gsi={gsi}
+        league={league}
+        assignments={assignments}
+        scale={scale}
+      />
     </div>
   );
 }

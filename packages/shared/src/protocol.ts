@@ -5,9 +5,11 @@
 
 import type { GsiPayload, GsiStatus } from './gsi.js';
 import type { ObsState } from './obs.js';
-import type { Overlay } from './overlay.js';
+import type { Overlay, OverlayAssignments } from './overlay.js';
+import type { LeagueData } from './league.js';
 import type { Rig } from './rig.js';
 import type { Replay, ReplaySettings } from './replay.js';
+import type { Asset } from './asset.js';
 import type { ActivityEvent, SessionUser } from './presence.js';
 
 /** Messages the server broadcasts to connected clients. */
@@ -23,6 +25,9 @@ export type ServerMessage =
   | { type: 'activityLog'; events: ActivityEvent[] }
   | { type: 'obsFrame'; channel: ObsFrameChannel; dataUrl: string | null; ts: number }
   | { type: 'replays'; replays: Replay[]; settings: ReplaySettings }
+  | { type: 'assets'; assets: Asset[] }
+  | { type: 'assignments'; assignments: Record<string, OverlayAssignments> }
+  | { type: 'league'; league: LeagueData }
   | { type: 'hello'; serverTime: number; you: SessionUser | null };
 
 /** Which monitor a pushed video frame belongs to. */

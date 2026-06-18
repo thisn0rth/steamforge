@@ -61,14 +61,38 @@ export interface ShapeLayerProps {
 }
 
 /**
- * Binds a layer's content to a path in the live GSI payload, e.g.
- * `map.team_ct.score` or `player.state.health`. Used by `gsiText` layers.
+ * Binds a layer's content to data. Two modes:
+ *
+ * 1. Direct GSI: `path` is a path into the live GSI payload, e.g.
+ *    `map.team_ct.score`, `player.state.health`, or the virtual player
+ *    namespace `players.ct.1.state.health`.
+ * 2. Slot-relative: when `slotId` is set, `path` is resolved against the entity
+ *    assigned to that overlay slot at use-time, prefixed by dataset:
+ *    `gsi.state.health` (live game data) or `fs.avgKills` (Firestore league
+ *    data). This is what powers "focus" overlays: design once with a slot, then
+ *    pick the concrete player/team/match when the overlay is used.
  */
 export interface GsiBinding {
   path: string;
   /** Optional printf-style/template, e.g. "{value} HP". `{value}` is replaced. */
   template?: string;
   fallback?: string;
+  /** When set, `path` is resolved against this overlay slot's assigned entity. */
+  slotId?: string;
+}
+
+/** The kind of entity an overlay slot accepts. */
+export type SlotKind = 'player' | 'team' | 'match';
+
+/**
+ * A declared data slot ("role") on an overlay. Bindings reference a slot
+ * instead of a concrete entity; the concrete player/team/match is chosen at
+ * use-time (on select / push to preview / rig activation).
+ */
+export interface OverlaySlot {
+  id: string;
+  label: string;
+  kind: SlotKind;
 }
 
 export interface Layer {
@@ -103,6 +127,25 @@ export interface Overlay {
   description?: string;
   composition: OverlayComposition;
   layers: Layer[];
+  /** Declared data slots ("focus" roles) bindings can reference. */
+  slots?: OverlaySlot[];
+  /** Default slot assignment baked into the overlay (overridable at use-time). */
+  defaultAssignments?: OverlayAssignments;
   createdAt: number;
   updatedAt: number;
 }
+
+/**
+ * Resolves an overlay slot to concrete entities at use-time. A player slot can
+ * carry both a live GSI reference and a Firestore document id so one slot
+ * exposes live + league data together.
+ */
+export interface SlotAssignment {
+  /** GSI reference, e.g. `players.ct.1` (player) or `ct`/`t` (team). */
+  gsiRef?: string;
+  /** Firestore document id within the slot kind's collection. */
+  fsId?: string;
+}
+
+/** slotId -> assignment for a single overlay. */
+export type OverlayAssignments = Record<string, SlotAssignment>;

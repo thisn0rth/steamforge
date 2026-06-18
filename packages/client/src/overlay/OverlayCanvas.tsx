@@ -1,6 +1,14 @@
 import type { CSSProperties } from 'react';
-import type { GsiPayload, Layer, Overlay } from '@streamforge/shared';
-import { numAt, resolveBinding, strAt } from './evaluate';
+import type {
+  GsiPayload,
+  Layer,
+  LeagueData,
+  Overlay,
+  OverlayAssignments,
+  ResolveContext,
+} from '@streamforge/shared';
+import { resolveBindingText } from '@streamforge/shared';
+import { numAt, strAt } from './evaluate';
 
 /**
  * Renders an overlay composition at native resolution and time `timeMs`.
@@ -12,6 +20,8 @@ export function OverlayCanvas({
   overlay,
   timeMs,
   gsi,
+  league = null,
+  assignments,
   scale = 1,
   selectedLayerId,
   onSelectLayer,
@@ -19,11 +29,19 @@ export function OverlayCanvas({
   overlay: Overlay;
   timeMs: number;
   gsi: GsiPayload | null;
+  league?: LeagueData | null;
+  assignments?: OverlayAssignments;
   scale?: number;
   selectedLayerId?: string | null;
   onSelectLayer?: (id: string) => void;
 }) {
   const { composition } = overlay;
+  const ctx: ResolveContext = {
+    gsi,
+    league,
+    slots: overlay.slots,
+    assignments: assignments ?? overlay.defaultAssignments,
+  };
   return (
     <div
       style={{
@@ -53,7 +71,7 @@ export function OverlayCanvas({
               key={layer.id}
               layer={layer}
               timeMs={timeMs}
-              gsi={gsi}
+              ctx={ctx}
               selected={selectedLayerId === layer.id}
               onSelect={onSelectLayer}
             />
@@ -66,13 +84,13 @@ export function OverlayCanvas({
 function LayerView({
   layer,
   timeMs,
-  gsi,
+  ctx,
   selected,
   onSelect,
 }: {
   layer: Layer;
   timeMs: number;
-  gsi: GsiPayload | null;
+  ctx: ResolveContext;
   selected: boolean;
   onSelect?: (id: string) => void;
 }) {
@@ -103,7 +121,7 @@ function LayerView({
       style={base}
       onMouseDown={onSelect ? () => onSelect(layer.id) : undefined}
     >
-      <LayerContent layer={layer} timeMs={timeMs} gsi={gsi} width={w} height={h} />
+      <LayerContent layer={layer} timeMs={timeMs} ctx={ctx} width={w} height={h} />
     </div>
   );
 }
@@ -111,13 +129,13 @@ function LayerView({
 function LayerContent({
   layer,
   timeMs,
-  gsi,
+  ctx,
   width,
   height,
 }: {
   layer: Layer;
   timeMs: number;
-  gsi: GsiPayload | null;
+  ctx: ResolveContext;
   width: number;
   height: number;
 }) {
@@ -126,7 +144,7 @@ function LayerContent({
     if (!props) return null;
     const content =
       layer.type === 'gsiText' && layer.binding
-        ? resolveBinding(layer.binding, gsi)
+        ? resolveBindingText(layer.binding, ctx)
         : strAt({ value: props.text }, timeMs);
     return (
       <div

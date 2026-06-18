@@ -1,10 +1,4 @@
-import type {
-  AnimatableProperty,
-  EasingKind,
-  GsiBinding,
-  GsiPayload,
-  Keyframe,
-} from '@streamforge/shared';
+import type { AnimatableProperty, EasingKind, Keyframe } from '@streamforge/shared';
 
 const EASING: Record<EasingKind, (t: number) => number> = {
   linear: (t) => t,
@@ -53,22 +47,4 @@ function interpolate(
     }
   }
   return fallback;
-}
-
-/** Read a dotted path (e.g. `map.team_ct.score`) out of the GSI payload. */
-export function readPath(obj: unknown, path: string): unknown {
-  return path.split('.').reduce<unknown>((acc, key) => {
-    if (acc && typeof acc === 'object' && key in (acc as Record<string, unknown>)) {
-      return (acc as Record<string, unknown>)[key];
-    }
-    return undefined;
-  }, obj);
-}
-
-/** Resolve a GSI binding to display text, applying template + fallback. */
-export function resolveBinding(binding: GsiBinding, gsi: GsiPayload | null): string {
-  const raw = gsi ? readPath(gsi, binding.path) : undefined;
-  if (raw == null || raw === '') return binding.fallback ?? '';
-  const value = String(raw);
-  return binding.template ? binding.template.replace('{value}', value) : value;
 }
