@@ -3,6 +3,8 @@
  * obs-websocket connection; clients see a normalized snapshot.
  */
 
+import type { ObsReplayBufferStatus } from './replay.js';
+
 export interface ObsConnectionConfig {
   url: string;
   password?: string;
@@ -67,4 +69,5 @@ export interface ObsState {
   streaming: ObsStreamStatus;
   recording: ObsRecordStatus;
   stats: ObsStats | null;
+  replayBuffer: ObsReplayBufferStatus;
 }

@@ -5,6 +5,7 @@ import { ActivityFeed } from '@/components/ActivityFeed';
 import { BroadcastStatusBar } from '@/components/BroadcastStatusBar';
 import { BroadcastMonitors } from '@/components/BroadcastMonitors';
 import { ProgramSources } from '@/components/ProgramSources';
+import { ReplayPanel } from '@/components/ReplayPanel';
 
 export function ControlSurface() {
   return (
@@ -25,6 +26,7 @@ export function ControlSurface() {
             </div>
             <div className="space-y-5">
               <ProgramSources />
+              <ReplayPanel />
               <ActivityFeed className="rounded-xl border border-ink-600 bg-ink-800 p-5" />
             </div>
           </div>

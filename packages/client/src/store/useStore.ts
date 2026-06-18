@@ -4,6 +4,8 @@ import type {
   GsiPayload,
   GsiStatus,
   ObsState,
+  Replay,
+  ReplaySettings,
   Rig,
   SessionUser,
 } from '@streamforge/shared';
@@ -25,6 +27,8 @@ interface AppState {
   activity: ActivityEvent[];
   programFrame: string | null;
   previewFrame: string | null;
+  replays: Replay[];
+  replaySettings: ReplaySettings;
 
   init: () => void;
   refreshRigs: () => Promise<void>;
@@ -44,6 +48,7 @@ const emptyObs: ObsState = {
   streaming: { active: false, durationMs: 0, kbitsPerSec: 0, skippedFrames: 0, totalFrames: 0, congestion: 0 },
   recording: { active: false, paused: false, durationMs: 0 },
   stats: null,
+  replayBuffer: { active: false, saving: false },
 };
 
 let socket: RealtimeSocket | null = null;
@@ -60,6 +65,8 @@ export const useStore = create<AppState>((set, get) => ({
   activity: [],
   programFrame: null,
   previewFrame: null,
+  replays: [],
+  replaySettings: { playerSource: null, autoLoad: true },
 
   init: () => {
     if (socket) return;
@@ -106,6 +113,9 @@ export const useStore = create<AppState>((set, get) => ({
           case 'activityLog':
             set({ activity: msg.events.slice(-ACTIVITY_CAP) });
             break;
+          case 'replays':
+            set({ replays: msg.replays, replaySettings: msg.settings });
+            break;
           default:
             break;
         }
@@ -119,6 +129,10 @@ export const useStore = create<AppState>((set, get) => ({
     void get().refreshObs();
     api.gsiStatus().then((s) => set({ gsiStatus: s })).catch(() => undefined);
     api.gsiCurrent().then((g) => g && set({ gsi: g })).catch(() => undefined);
+    api
+      .replays()
+      .then((r) => set({ replays: r.replays, replaySettings: r.settings }))
+      .catch(() => undefined);
   },
 
   refreshRigs: async () => {

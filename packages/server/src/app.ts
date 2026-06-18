@@ -8,8 +8,10 @@ import { obsRouter } from './routes/obs.js';
 import { rigsRouter } from './routes/rigs.js';
 import { overlaysRouter } from './routes/overlays.js';
 import { transitionsRouter } from './routes/transitions.js';
+import { replaysRouter } from './routes/replays.js';
 import { authRouter } from './routes/auth.js';
 import { requireAuth } from './auth/middleware.js';
+import { dataPath } from './config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -35,6 +37,12 @@ export function createApp(): express.Express {
   app.use(rigsRouter);
   app.use(overlaysRouter);
   app.use(transitionsRouter);
+  app.use(replaysRouter);
+
+  // Saved replay clips are served as static media for the UI and OBS.
+  const replaysDir = dataPath('replays');
+  fs.mkdirSync(replaysDir, { recursive: true });
+  app.use('/replays', express.static(replaysDir));
 
   // In production, serve the built client (control UI + overlay renderer).
   // dist layout: packages/server/dist/app.js -> ../../client/dist

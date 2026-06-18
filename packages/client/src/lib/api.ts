@@ -3,6 +3,8 @@ import type {
   GsiStatus,
   ObsState,
   Overlay,
+  Replay,
+  ReplaySettings,
   Rig,
   SessionUser,
   Transition,
@@ -102,6 +104,21 @@ export const api = {
   updateOverlay: (id: string, overlay: Partial<Overlay>) =>
     http<Overlay>(`/api/overlays/${id}`, { method: 'PUT', body: JSON.stringify(overlay) }),
   deleteOverlay: (id: string) => http<void>(`/api/overlays/${id}`, { method: 'DELETE' }),
+
+  // Replays
+  replays: () => http<{ replays: Replay[]; settings: ReplaySettings }>('/api/replays'),
+  saveReplay: () => http<{ ok: true }>('/api/replays/save', { method: 'POST' }),
+  startReplayBuffer: () =>
+    http<{ ok: true }>('/api/replays/buffer/start', { method: 'POST' }),
+  updateReplaySettings: (settings: Partial<ReplaySettings>) =>
+    http<ReplaySettings>('/api/replays/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+  loadReplay: (id: string) =>
+    http<Replay>(`/api/replays/${id}/load`, { method: 'POST' }),
+  deleteReplay: (id: string) =>
+    http<void>(`/api/replays/${id}`, { method: 'DELETE' }),
 
   // Transitions
   transitions: () => http<Transition[]>('/api/transitions'),

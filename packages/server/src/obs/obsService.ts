@@ -51,6 +51,10 @@ class ObsService extends EventEmitter {
   private grabbing = false;
   private viewers = 0;
   private lastPreviewSent: string | null = null;
+  private replayBufferActive = false;
+  private replaySaving = false;
+  private pendingReplayTriggeredBy: string | null = null;
+  private replaySaveTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     super();
@@ -61,6 +65,8 @@ class ObsService extends EventEmitter {
       this.streaming = { ...INACTIVE_STREAM };
       this.recording = { ...INACTIVE_RECORD };
       this.stats = null;
+      this.replayBufferActive = false;
+      this.clearReplayLock();
       this.emitState();
     });
     this.obs.on('StreamStateChanged', ({ outputActive }) => {
@@ -87,6 +93,19 @@ class ObsService extends EventEmitter {
     this.obs.on('StudioModeStateChanged', ({ studioModeEnabled }) => {
       this.studioModeEnabled = studioModeEnabled;
       this.emitState();
+    });
+    this.obs.on('CurrentSceneTransitionChanged', ({ transitionName }) => {
+      this.currentTransition = transitionName;
+      this.emitState();
+    });
+    this.obs.on('ReplayBufferStateChanged', ({ outputActive }) => {
+      this.replayBufferActive = outputActive;
+      this.emitState();
+    });
+    this.obs.on('ReplayBufferSaved', ({ savedReplayPath }) => {
+      const triggeredBy = this.pendingReplayTriggeredBy;
+      this.clearReplayLock();
+      this.emit('replaySaved', { path: savedReplayPath, triggeredBy });
     });
   }
 
@@ -123,6 +142,7 @@ class ObsService extends EventEmitter {
     await this.refreshScenes();
     await this.refreshTransitions();
     await this.refreshStudioMode();
+    await this.refreshReplayBuffer();
     await this.refreshOutputs();
     this.startPolling();
     this.updateFrameCapture();
@@ -334,6 +354,81 @@ class ObsService extends EventEmitter {
   async setCurrentTransition(transitionName: string): Promise<void> {
     this.assertConnected();
     await this.obs.call('SetCurrentSceneTransition', { transitionName });
+    this.currentTransition = transitionName;
+    this.emitState();
+  }
+
+  // ---- Replay buffer ------------------------------------------------------
+
+  private async refreshReplayBuffer(): Promise<void> {
+    if (!this.connected) return;
+    try {
+      const { outputActive } = await this.obs.call('GetReplayBufferStatus');
+      this.replayBufferActive = outputActive;
+    } catch {
+      // Replay buffer may be unsupported / disabled; treat as inactive.
+      this.replayBufferActive = false;
+    }
+  }
+
+  async startReplayBuffer(): Promise<void> {
+    this.assertConnected();
+    await this.obs.call('StartReplayBuffer');
+    this.replayBufferActive = true;
+    this.emitState();
+  }
+
+  /**
+   * Trigger an OBS replay-buffer save. Refuses overlapping saves so two
+   * operators can't clip at the same time; the lock clears on the
+   * `ReplayBufferSaved` event or after a timeout fallback.
+   */
+  async saveReplay(triggeredBy: string | null): Promise<void> {
+    this.assertConnected();
+    if (!this.replayBufferActive) {
+      throw new Error('Replay buffer is not running — start it first');
+    }
+    if (this.replaySaving) {
+      throw new Error('A replay is already being saved');
+    }
+    this.replaySaving = true;
+    this.pendingReplayTriggeredBy = triggeredBy;
+    this.emitState();
+    this.replaySaveTimer = setTimeout(() => this.clearReplayLock(), 15000);
+    try {
+      await this.obs.call('SaveReplayBuffer');
+    } catch (err) {
+      this.clearReplayLock();
+      throw err;
+    }
+  }
+
+  private clearReplayLock(): void {
+    this.replaySaving = false;
+    this.pendingReplayTriggeredBy = null;
+    if (this.replaySaveTimer) {
+      clearTimeout(this.replaySaveTimer);
+      this.replaySaveTimer = null;
+    }
+    this.emitState();
+  }
+
+  /** Point a media-source input at a replay file and restart playback. */
+  async loadReplayIntoSource(inputName: string, filePath: string): Promise<void> {
+    this.assertConnected();
+    await this.obs.call('SetInputSettings', {
+      inputName,
+      inputSettings: { local_file: filePath },
+      overlay: true,
+    });
+    try {
+      await this.obs.call('TriggerMediaInputAction', {
+        inputName,
+        mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART',
+      });
+    } catch {
+      // Not all source types support restart; the new file still loads.
+    }
   }
 
   async triggerTransition(): Promise<void> {
@@ -384,6 +479,10 @@ class ObsService extends EventEmitter {
       streaming: this.streaming,
       recording: this.recording,
       stats: this.stats,
+      replayBuffer: {
+        active: this.replayBufferActive,
+        saving: this.replaySaving,
+      },
     };
   }
 

@@ -92,6 +92,29 @@ A rig captures a complete production state:
 Activating a rig applies the transition, enforces visibility, then switches the
 program scene — atomically from the operator's point of view.
 
+## Instant replays
+
+StreamForge drives OBS's **replay buffer** so any operator (local or remote) can
+clip the last few seconds of program and have it land on the server for everyone.
+
+1. In OBS, enable the replay buffer once: **Settings → Output → Replay Buffer**
+   (set a max replay length). StreamForge can start/stop it from the **Instant
+   Replay** panel on the Broadcast Control page.
+2. Trigger a save any of these ways — they all go through the same server flow:
+   - the **Save Replay** button in the Instant Replay panel,
+   - the in-app **`R`** shortcut (when the control page is focused),
+   - OBS's own **Save Replay Buffer** hotkey (**Settings → Hotkeys**). This is a
+     true OS-global hotkey that fires no matter what window is focused — the
+     recommended way for the person at the production host.
+3. Overlapping saves are rejected server-side, so two operators can't clip at the
+   same instant. Each saved clip is copied into `data/replays/`, added to the
+   shared replay list, and announced in the activity feed.
+
+**Replay scenes:** pick any OBS **media source** as the *replay player* in the
+Instant Replay panel. With **auto-load** on, each new clip is pushed into that
+source and restarted, so a scene built around it becomes an instant-replay scene
+you can TAKE to. You can also re-load any older clip into the player on demand.
+
 ## Overlay editor
 
 - **Layers**: text, GSI-bound text, shapes, images.
