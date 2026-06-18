@@ -1,5 +1,4 @@
 import { PageHeader } from '@/components/PageHeader';
-import { GsiPanel } from '@/components/GsiPanel';
 import { SceneSwitcher } from '@/components/SceneSwitcher';
 import { RigGrid } from '@/components/RigGrid';
 import { ActivityFeed } from '@/components/ActivityFeed';
@@ -12,7 +11,7 @@ export function ControlSurface() {
     <div className="flex h-full flex-col overflow-hidden">
       <PageHeader
         title="Broadcast Control"
-        subtitle="Live program output, scenes, rigs, and match state."
+        subtitle="Live program + preview, one-tap rigs and scenes."
       />
       <div className="flex-1 overflow-y-auto">
         <div className="space-y-5 p-8">
@@ -23,7 +22,6 @@ export function ControlSurface() {
             <div className="space-y-5 xl:col-span-2">
               <RigGrid />
               <SceneSwitcher />
-              <GsiPanel />
             </div>
             <div className="space-y-5">
               <ProgramSources />

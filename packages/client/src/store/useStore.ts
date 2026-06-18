@@ -23,6 +23,8 @@ interface AppState {
   me: SessionUser | null;
   presence: SessionUser[];
   activity: ActivityEvent[];
+  programFrame: string | null;
+  previewFrame: string | null;
 
   init: () => void;
   refreshRigs: () => Promise<void>;
@@ -56,6 +58,8 @@ export const useStore = create<AppState>((set, get) => ({
   me: null,
   presence: [],
   activity: [],
+  programFrame: null,
+  previewFrame: null,
 
   init: () => {
     if (socket) return;
@@ -69,7 +73,18 @@ export const useStore = create<AppState>((set, get) => ({
             set({ gsiStatus: msg.status });
             break;
           case 'obsState':
-            set({ obs: msg.state });
+            set(
+              msg.state.connected
+                ? { obs: msg.state }
+                : { obs: msg.state, programFrame: null, previewFrame: null },
+            );
+            break;
+          case 'obsFrame':
+            set(
+              msg.channel === 'program'
+                ? { programFrame: msg.dataUrl }
+                : { previewFrame: msg.dataUrl },
+            );
             break;
           case 'rigsUpdated':
             set({ rigs: msg.rigs });

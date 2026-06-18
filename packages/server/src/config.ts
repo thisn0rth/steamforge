@@ -27,6 +27,15 @@ export interface ServerConfig {
     password: string;
     autoConnect: boolean;
   };
+  /** Live monitor preview (screenshot streaming) settings. */
+  preview: {
+    /** Frames per second to grab for the Program/Preview monitors. */
+    fps: number;
+    /** Downscaled frame width in pixels (height keeps aspect). */
+    width: number;
+    /** JPEG quality 1-100. */
+    quality: number;
+  };
 }
 
 function envBool(name: string, fallback: boolean): boolean {
@@ -51,7 +60,17 @@ export const config: ServerConfig = {
     password: process.env.OBS_WS_PASSWORD ?? '',
     autoConnect: envBool('OBS_AUTO_CONNECT', false),
   },
+  preview: {
+    fps: clamp(Number(process.env.STREAMFORGE_PREVIEW_FPS ?? 6), 1, 30),
+    width: clamp(Number(process.env.STREAMFORGE_PREVIEW_WIDTH ?? 480), 160, 1920),
+    quality: clamp(Number(process.env.STREAMFORGE_PREVIEW_QUALITY ?? 50), 1, 100),
+  },
 };
+
+function clamp(n: number, min: number, max: number): number {
+  if (Number.isNaN(n)) return min;
+  return Math.min(max, Math.max(min, n));
+}
 
 /** Absolute path helper for files inside the data directory. */
 export function dataPath(...segments: string[]): string {

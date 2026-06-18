@@ -47,12 +47,17 @@ class ObsService extends EventEmitter {
   private pollTimer: NodeJS.Timeout | null = null;
   private lastOutputBytes = 0;
   private lastBytesAt = 0;
+  private frameTimer: NodeJS.Timeout | null = null;
+  private grabbing = false;
+  private viewers = 0;
+  private lastPreviewSent: string | null = null;
 
   constructor() {
     super();
     this.obs.on('ConnectionClosed', () => {
       this.connected = false;
       this.stopPolling();
+      this.stopFrameCapture();
       this.streaming = { ...INACTIVE_STREAM };
       this.recording = { ...INACTIVE_RECORD };
       this.stats = null;
@@ -105,6 +110,7 @@ class ObsService extends EventEmitter {
     } finally {
       this.connected = false;
       this.stopPolling();
+      this.stopFrameCapture();
       this.emitState();
     }
   }
@@ -119,6 +125,7 @@ class ObsService extends EventEmitter {
     await this.refreshStudioMode();
     await this.refreshOutputs();
     this.startPolling();
+    this.updateFrameCapture();
     this.emitState();
   }
 
@@ -133,6 +140,75 @@ class ObsService extends EventEmitter {
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
+    }
+  }
+
+  /** Track how many clients are watching so frame capture only runs when needed. */
+  setViewers(count: number): void {
+    this.viewers = Math.max(0, count);
+    this.updateFrameCapture();
+  }
+
+  private updateFrameCapture(): void {
+    const shouldRun = this.connected && this.viewers > 0;
+    if (shouldRun) {
+      this.startFrameCapture();
+    } else {
+      this.stopFrameCapture();
+    }
+  }
+
+  private startFrameCapture(): void {
+    if (this.frameTimer) return;
+    const interval = Math.round(1000 / config.preview.fps);
+    this.frameTimer = setInterval(() => void this.grabFrames(), interval);
+  }
+
+  private stopFrameCapture(): void {
+    if (this.frameTimer) {
+      clearInterval(this.frameTimer);
+      this.frameTimer = null;
+    }
+  }
+
+  /** Grab JPEG snapshots of the Program (and Preview) scenes and emit them. */
+  private async grabFrames(): Promise<void> {
+    if (!this.connected || this.grabbing) return;
+    this.grabbing = true;
+    try {
+      const program = this.currentProgramScene;
+      const preview = this.studioModeEnabled ? this.currentPreviewScene : null;
+
+      if (program) {
+        const dataUrl = await this.screenshot(program);
+        if (dataUrl) this.emit('frame', { channel: 'program', dataUrl, ts: Date.now() });
+      }
+
+      if (preview) {
+        const dataUrl = await this.screenshot(preview);
+        if (dataUrl) this.emit('frame', { channel: 'preview', dataUrl, ts: Date.now() });
+        this.lastPreviewSent = preview;
+      } else if (this.lastPreviewSent !== null) {
+        // Studio Mode turned off — clear the stale preview frame once.
+        this.emit('frame', { channel: 'preview', dataUrl: null, ts: Date.now() });
+        this.lastPreviewSent = null;
+      }
+    } finally {
+      this.grabbing = false;
+    }
+  }
+
+  private async screenshot(sourceName: string): Promise<string | null> {
+    try {
+      const { imageData } = await this.obs.call('GetSourceScreenshot', {
+        sourceName,
+        imageFormat: 'jpg',
+        imageWidth: config.preview.width,
+        imageCompressionQuality: config.preview.quality,
+      });
+      return imageData ?? null;
+    } catch {
+      return null;
     }
   }
 

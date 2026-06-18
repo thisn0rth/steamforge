@@ -16,6 +16,7 @@ import {
   isLoopback,
   userForToken,
 } from '../auth/auth.js';
+import { obsService } from '../obs/obsService.js';
 
 const ACTIVITY_LIMIT = 80;
 
@@ -57,6 +58,7 @@ class WsHub {
       return;
     }
     this.users.set(socket, user);
+    obsService.setViewers(this.clientCount());
 
     this.send(socket, { type: 'hello', serverTime: Date.now(), you: user });
     // Replay cached state so a freshly-loaded overlay/UI is immediately correct.
@@ -85,6 +87,7 @@ class WsHub {
     socket.on('close', () => {
       const left = this.users.get(socket);
       this.users.delete(socket);
+      obsService.setViewers(this.clientCount());
       this.broadcastPresence();
       if (left && !left.host && !this.hasUser(left.id)) {
         this.logActivity(left, 'leave', `${left.name} left`);
@@ -133,7 +136,8 @@ class WsHub {
     if (
       msg.type !== 'rigActivated' &&
       msg.type !== 'hello' &&
-      msg.type !== 'activity'
+      msg.type !== 'activity' &&
+      msg.type !== 'obsFrame'
     ) {
       this.lastByType.set(msg.type, msg);
     }
