@@ -71,6 +71,32 @@ obsRouter.post('/api/obs/source', async (req, res) => {
   }
 });
 
+obsRouter.post('/api/obs/stream', async (req, res) => {
+  try {
+    const active = await obsService.toggleStream();
+    const user = userFromRequest(req);
+    if (user) {
+      wsHub.logActivity(user, 'obsConnection', active ? 'started streaming' : 'stopped streaming');
+    }
+    res.json(obsService.state());
+  } catch (err) {
+    res.status(502).json({ error: errMsg(err) });
+  }
+});
+
+obsRouter.post('/api/obs/record', async (req, res) => {
+  try {
+    const active = await obsService.toggleRecord();
+    const user = userFromRequest(req);
+    if (user) {
+      wsHub.logActivity(user, 'obsConnection', active ? 'started recording' : 'stopped recording');
+    }
+    res.json(obsService.state());
+  } catch (err) {
+    res.status(502).json({ error: errMsg(err) });
+  }
+});
+
 obsRouter.post('/api/obs/transition', async (req, res) => {
   const { transitionName, trigger } = req.body ?? {};
   try {

@@ -34,7 +34,7 @@ export function AppLayout() {
     <div className="flex h-screen overflow-hidden bg-ink-900 text-text">
       <aside className="flex w-60 shrink-0 flex-col border-r border-ink-600 bg-ink-850">
         <div className="flex items-center gap-2.5 px-5 py-5">
-          <div className="pulse-ring flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white shadow-glow">
+          <div className="pulse-ring flex h-8 w-8 items-center justify-center rounded-lg bg-live text-white shadow-onair">
             <Radio size={18} />
           </div>
           <div className="leading-tight">
@@ -55,7 +55,7 @@ export function AppLayout() {
                 clsx(
                   'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                   isActive
-                    ? 'bg-accent/15 text-text shadow-[inset_0_0_0_1px_rgba(108,123,255,0.35)]'
+                    ? 'bg-ink-700 text-text shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12)]'
                     : 'text-text-muted hover:bg-ink-700/60 hover:text-text',
                 )
               }

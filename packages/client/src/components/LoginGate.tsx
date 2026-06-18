@@ -83,7 +83,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
           className="w-[360px] rounded-2xl border border-ink-600 bg-ink-850 p-7 shadow-xl"
         >
           <div className="mb-6 flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white shadow-glow">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-live text-white shadow-onair">
               <Radio size={18} />
             </div>
             <div className="leading-tight">
@@ -140,7 +140,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
           <button
             type="submit"
             disabled={busy}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-ink-900 shadow-glow transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <LogIn size={16} />
             {busy ? 'Signing in…' : 'Enter control room'}

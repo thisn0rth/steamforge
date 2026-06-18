@@ -1,7 +1,30 @@
 import { EventEmitter } from 'node:events';
 import OBSWebSocket from 'obs-websocket-js';
-import type { ObsScene, ObsState } from '@streamforge/shared';
+import type {
+  ObsScene,
+  ObsState,
+  ObsStreamStatus,
+  ObsRecordStatus,
+  ObsStats,
+} from '@streamforge/shared';
 import { config } from '../config.js';
+
+const INACTIVE_STREAM: ObsStreamStatus = {
+  active: false,
+  durationMs: 0,
+  kbitsPerSec: 0,
+  skippedFrames: 0,
+  totalFrames: 0,
+  congestion: 0,
+};
+const INACTIVE_RECORD: ObsRecordStatus = {
+  active: false,
+  paused: false,
+  durationMs: 0,
+};
+
+/** How often to poll OBS for live output/encoder stats while connected. */
+const POLL_INTERVAL_MS = 1000;
 
 /**
  * Owns the single obs-websocket connection and exposes a normalized snapshot
@@ -18,11 +41,31 @@ class ObsService extends EventEmitter {
   private scenes: ObsScene[] = [];
   private transitions: string[] = [];
   private currentTransition: string | null = null;
+  private streaming: ObsStreamStatus = { ...INACTIVE_STREAM };
+  private recording: ObsRecordStatus = { ...INACTIVE_RECORD };
+  private stats: ObsStats | null = null;
+  private pollTimer: NodeJS.Timeout | null = null;
+  private lastOutputBytes = 0;
+  private lastBytesAt = 0;
 
   constructor() {
     super();
     this.obs.on('ConnectionClosed', () => {
       this.connected = false;
+      this.stopPolling();
+      this.streaming = { ...INACTIVE_STREAM };
+      this.recording = { ...INACTIVE_RECORD };
+      this.stats = null;
+      this.emitState();
+    });
+    this.obs.on('StreamStateChanged', ({ outputActive }) => {
+      this.streaming.active = outputActive;
+      if (!outputActive) this.streaming = { ...INACTIVE_STREAM };
+      this.emitState();
+    });
+    this.obs.on('RecordStateChanged', ({ outputActive }) => {
+      this.recording.active = outputActive;
+      if (!outputActive) this.recording = { ...INACTIVE_RECORD };
       this.emitState();
     });
     this.obs.on('CurrentProgramSceneChanged', ({ sceneName }) => {
@@ -61,6 +104,7 @@ class ObsService extends EventEmitter {
       await this.obs.disconnect();
     } finally {
       this.connected = false;
+      this.stopPolling();
       this.emitState();
     }
   }
@@ -73,7 +117,74 @@ class ObsService extends EventEmitter {
     await this.refreshScenes();
     await this.refreshTransitions();
     await this.refreshStudioMode();
+    await this.refreshOutputs();
+    this.startPolling();
     this.emitState();
+  }
+
+  private startPolling(): void {
+    if (this.pollTimer) return;
+    this.pollTimer = setInterval(() => {
+      void this.refreshOutputs();
+    }, POLL_INTERVAL_MS);
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+  }
+
+  /** Poll streaming/recording/encoder stats. Quiet on failure. */
+  private async refreshOutputs(): Promise<void> {
+    if (!this.connected) return;
+    try {
+      const [stream, record, stats] = await Promise.all([
+        this.obs.call('GetStreamStatus'),
+        this.obs.call('GetRecordStatus'),
+        this.obs.call('GetStats'),
+      ]);
+
+      const now = Date.now();
+      const bytes = Number(stream.outputBytes ?? 0);
+      let kbitsPerSec = 0;
+      if (stream.outputActive && this.lastBytesAt > 0) {
+        const seconds = (now - this.lastBytesAt) / 1000;
+        if (seconds > 0) {
+          kbitsPerSec = Math.max(0, ((bytes - this.lastOutputBytes) * 8) / 1000 / seconds);
+        }
+      }
+      this.lastOutputBytes = bytes;
+      this.lastBytesAt = now;
+
+      this.streaming = {
+        active: Boolean(stream.outputActive),
+        durationMs: Number(stream.outputDuration ?? 0),
+        kbitsPerSec: Math.round(kbitsPerSec),
+        skippedFrames: Number(stream.outputSkippedFrames ?? 0),
+        totalFrames: Number(stream.outputTotalFrames ?? 0),
+        congestion: Number(stream.outputCongestion ?? 0),
+      };
+      this.recording = {
+        active: Boolean(record.outputActive),
+        paused: Boolean(record.outputPaused),
+        durationMs: Number(record.outputDuration ?? 0),
+      };
+      this.stats = {
+        cpuUsage: Number(stats.cpuUsage ?? 0),
+        memoryUsageMb: Number(stats.memoryUsage ?? 0),
+        activeFps: Number(stats.activeFps ?? 0),
+        averageFrameRenderMs: Number(stats.averageFrameRenderTime ?? 0),
+        renderTotalFrames: Number(stats.renderTotalFrames ?? 0),
+        renderSkippedFrames: Number(stats.renderSkippedFrames ?? 0),
+        outputTotalFrames: Number(stats.outputTotalFrames ?? 0),
+        outputSkippedFrames: Number(stats.outputSkippedFrames ?? 0),
+      };
+      this.emitState();
+    } catch {
+      // Transient poll failures are non-fatal; keep last known values.
+    }
   }
 
   private async refreshScenes(): Promise<void> {
@@ -156,6 +267,24 @@ class ObsService extends EventEmitter {
     }
   }
 
+  async toggleStream(): Promise<boolean> {
+    this.assertConnected();
+    const { outputActive } = await this.obs.call('ToggleStream');
+    this.streaming.active = outputActive;
+    if (!outputActive) this.streaming = { ...INACTIVE_STREAM };
+    this.emitState();
+    return outputActive;
+  }
+
+  async toggleRecord(): Promise<boolean> {
+    this.assertConnected();
+    const { outputActive } = await this.obs.call('ToggleRecord');
+    this.recording.active = outputActive;
+    if (!outputActive) this.recording = { ...INACTIVE_RECORD };
+    this.emitState();
+    return outputActive;
+  }
+
   async refresh(): Promise<void> {
     await this.refreshAll();
   }
@@ -176,6 +305,9 @@ class ObsService extends EventEmitter {
       scenes: this.scenes,
       transitions: this.transitions,
       currentTransition: this.currentTransition,
+      streaming: this.streaming,
+      recording: this.recording,
+      stats: this.stats,
     };
   }
 

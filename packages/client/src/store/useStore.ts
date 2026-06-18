@@ -39,6 +39,9 @@ const emptyObs: ObsState = {
   scenes: [],
   transitions: [],
   currentTransition: null,
+  streaming: { active: false, durationMs: 0, kbitsPerSec: 0, skippedFrames: 0, totalFrames: 0, congestion: 0 },
+  recording: { active: false, paused: false, durationMs: 0 },
+  stats: null,
 };
 
 let socket: RealtimeSocket | null = null;

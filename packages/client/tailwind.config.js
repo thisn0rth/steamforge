@@ -4,33 +4,39 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Devin.ai-inspired dark palette.
+        // Neutral broadcast-dark palette.
         ink: {
-          900: '#08090c', // app background
-          850: '#0c0e13',
-          800: '#11131a', // panels
-          750: '#151823',
-          700: '#1b1f2b', // raised surfaces
-          600: '#232838', // borders / dividers
-          500: '#2f3547',
+          900: '#141414', // app background
+          850: '#171717',
+          800: '#191919', // panels / lighter background
+          750: '#1f1f1f', // raised surfaces
+          700: '#242424',
+          600: '#2a2a2a', // borders / dividers
+          500: '#3a3a3a',
         },
         accent: {
-          DEFAULT: '#6c7bff',
-          soft: '#8a96ff',
-          dim: '#4b56c7',
-          glow: 'rgba(108,123,255,0.25)',
+          DEFAULT: '#f2f2f2',
+          soft: '#ffffff',
+          dim: '#9a9a9a',
+          glow: 'rgba(255,255,255,0.16)',
         },
         teal: {
-          DEFAULT: '#39d3c3',
+          DEFAULT: '#2dd4a7',
         },
+        // On-air / program.
         live: {
-          DEFAULT: '#ff4d6d',
-          dim: '#c8324f',
+          DEFAULT: '#ff3b46',
+          dim: '#c8323c',
+        },
+        // Preview / staged.
+        preview: {
+          DEFAULT: '#2dd4a7',
+          dim: '#1f9c7b',
         },
         text: {
-          DEFAULT: '#e8eaf0',
-          muted: '#9aa0b0',
-          faint: '#646b7e',
+          DEFAULT: '#ededed',
+          muted: '#a3a3a3',
+          faint: '#6b6b6b',
         },
       },
       fontFamily: {
@@ -38,8 +44,9 @@ export default {
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       boxShadow: {
-        glow: '0 0 0 1px rgba(108,123,255,0.4), 0 8px 30px -8px rgba(108,123,255,0.45)',
+        glow: '0 0 0 1px rgba(255,255,255,0.18), 0 8px 30px -8px rgba(0,0,0,0.7)',
         panel: '0 1px 0 rgba(255,255,255,0.03) inset, 0 8px 24px -12px rgba(0,0,0,0.6)',
+        onair: '0 0 0 1px rgba(255,59,70,0.5), 0 0 30px -6px rgba(255,59,70,0.45)',
       },
       backgroundImage: {
         'grid-faint':

@@ -73,6 +73,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ sceneName, sourceName, enabled }),
     }),
+  obsTransition: (transitionName?: string, trigger = false) =>
+    http<ObsState>('/api/obs/transition', {
+      method: 'POST',
+      body: JSON.stringify({ transitionName, trigger }),
+    }),
+  obsToggleStream: () => http<ObsState>('/api/obs/stream', { method: 'POST' }),
+  obsToggleRecord: () => http<ObsState>('/api/obs/record', { method: 'POST' }),
 
   // Rigs
   rigs: () => http<Rig[]>('/api/rigs'),

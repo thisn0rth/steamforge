@@ -101,7 +101,7 @@ export function LayersPanel({
               className={clsx(
                 'group mb-1 flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition',
                 selected
-                  ? 'bg-accent/15 shadow-[inset_0_0_0_1px_rgba(108,123,255,0.4)]'
+                  ? 'bg-accent/15 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.25)]'
                   : 'hover:bg-ink-700/60',
               )}
             >

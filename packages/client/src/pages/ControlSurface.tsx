@@ -3,21 +3,34 @@ import { GsiPanel } from '@/components/GsiPanel';
 import { SceneSwitcher } from '@/components/SceneSwitcher';
 import { RigGrid } from '@/components/RigGrid';
 import { ActivityFeed } from '@/components/ActivityFeed';
+import { BroadcastStatusBar } from '@/components/BroadcastStatusBar';
+import { BroadcastMonitors } from '@/components/BroadcastMonitors';
+import { ProgramSources } from '@/components/ProgramSources';
 
 export function ControlSurface() {
   return (
-    <div>
+    <div className="flex h-full flex-col overflow-hidden">
       <PageHeader
-        title="Control Surface"
-        subtitle="Switch rigs, scenes, and watch live CS2 match state."
+        title="Broadcast Control"
+        subtitle="Live program output, scenes, rigs, and match state."
       />
-      <div className="space-y-5 p-8">
-        <RigGrid />
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <GsiPanel />
-          <SceneSwitcher />
+      <div className="flex-1 overflow-y-auto">
+        <div className="space-y-5 p-8">
+          <BroadcastStatusBar />
+          <BroadcastMonitors />
+
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+            <div className="space-y-5 xl:col-span-2">
+              <RigGrid />
+              <SceneSwitcher />
+              <GsiPanel />
+            </div>
+            <div className="space-y-5">
+              <ProgramSources />
+              <ActivityFeed className="rounded-xl border border-ink-600 bg-ink-800 p-5" />
+            </div>
+          </div>
         </div>
-        <ActivityFeed className="rounded-xl border border-ink-600 bg-ink-850 p-5" />
       </div>
     </div>
   );
