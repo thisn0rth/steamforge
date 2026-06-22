@@ -65,6 +65,9 @@ outputRouter.delete('/api/output/:channel/:overlayId', (req, res) => {
 outputRouter.post('/api/output/take', (req, res) => {
   const state = outputStore.take();
   publish(state);
+  // One TAKE commits both: the staged OBS scene (Studio Mode transition) and
+  // the overlay output, then points the shared "Overlay" source at /live.
+  void obsService.triggerTransition();
   void obsService.setOverlayChannel('program');
   logOutput(req, 'took preview to live');
   res.json(state);

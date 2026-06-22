@@ -146,6 +146,8 @@ class ObsService extends EventEmitter {
     await this.refreshScenes();
     await this.refreshTransitions();
     await this.refreshStudioMode();
+    // The control room is a Live/Preview model, which needs OBS Studio Mode.
+    await this.ensureStudioMode().catch(() => undefined);
     await this.refreshReplayBuffer();
     await this.refreshOutputs();
     this.startPolling();
@@ -337,7 +339,16 @@ class ObsService extends EventEmitter {
 
   async setPreviewScene(sceneName: string): Promise<void> {
     this.assertConnected();
+    await this.ensureStudioMode();
     await this.obs.call('SetCurrentPreviewScene', { sceneName });
+  }
+
+  /** Studio Mode gives OBS a separate Preview scene; staging requires it. */
+  async ensureStudioMode(): Promise<void> {
+    if (this.studioModeEnabled) return;
+    await this.obs.call('SetStudioModeEnabled', { studioModeEnabled: true });
+    this.studioModeEnabled = true;
+    this.emitState();
   }
 
   async setSourceEnabled(
@@ -471,10 +482,10 @@ class ObsService extends EventEmitter {
   }
 
   async triggerTransition(): Promise<void> {
-    this.assertConnected();
-    if (this.studioModeEnabled) {
-      await this.obs.call('TriggerStudioModeTransition');
-    }
+    // Called as part of TAKE; a disconnected OBS is non-fatal (overlay output
+    // still commits), so no-op rather than throw.
+    if (!this.connected || !this.studioModeEnabled) return;
+    await this.obs.call('TriggerStudioModeTransition');
   }
 
   async toggleStream(): Promise<boolean> {

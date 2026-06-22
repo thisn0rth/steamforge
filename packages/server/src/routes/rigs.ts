@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { nanoid } from 'nanoid';
-import type { Rig } from '@streamforge/shared';
+import type { OverlayAssignments, Rig } from '@streamforge/shared';
 import { store } from '../store/store.js';
 import { applyRig } from '../rigs/rigEngine.js';
 import { wsHub } from '../realtime/wsHub.js';
@@ -68,7 +68,9 @@ rigsRouter.post('/api/rigs/:id/activate', async (req, res) => {
     res.status(404).json({ error: 'rig not found' });
     return;
   }
-  const result = await applyRig(rig);
+  // Per-overlay focus chosen at stage time (the data-binding popup).
+  const assignments = (req.body?.assignments ?? {}) as Record<string, OverlayAssignments>;
+  const result = await applyRig(rig, assignments);
   wsHub.broadcast({ type: 'rigActivated', rigId: rig.id });
   const user = userFromRequest(req);
   if (user) {
