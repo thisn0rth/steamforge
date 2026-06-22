@@ -1,4 +1,5 @@
-import { Diamond } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Diamond, ImagePlus, Maximize2, X } from 'lucide-react';
 import clsx from 'clsx';
 import type { Layer, LayerTransform, OverlaySlot } from '@streamforge/shared';
 import { numAt } from '@/overlay/evaluate';
@@ -29,6 +30,8 @@ export function PropertiesPanel({
   onChange: (layer: Layer) => void;
   onToggleKeyframe: (key: keyof LayerTransform) => void;
 }) {
+  const [htmlEditorOpen, setHtmlEditorOpen] = useState(false);
+
   if (!layer) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-center text-xs text-text-faint">
@@ -234,7 +237,18 @@ export function PropertiesPanel({
         )}
 
         {layer.type === 'html' && layer.html && (
-          <Section title="HTML / CSS">
+          <Section
+            title="HTML / CSS"
+            action={
+              <button
+                className="flex items-center gap-1 text-[11px] text-text-faint hover:text-text"
+                onClick={() => setHtmlEditorOpen(true)}
+                title="Open fullscreen editor"
+              >
+                <Maximize2 size={12} /> Expand
+              </button>
+            }
+          >
             <Field label="HTML">
               <textarea
                 className="input min-h-[120px] resize-y font-mono text-xs"
@@ -272,6 +286,17 @@ export function PropertiesPanel({
               )}
             </div>
           </Section>
+        )}
+
+        {layer.type === 'html' && layer.html && htmlEditorOpen && (
+          <HtmlCssEditor
+            html={layer.html.html}
+            css={layer.html.css ?? ''}
+            slots={slots}
+            onChangeHtml={(html) => patch({ html: { ...layer.html!, html } })}
+            onChangeCss={(css) => patch({ html: { ...layer.html!, css } })}
+            onClose={() => setHtmlEditorOpen(false)}
+          />
         )}
 
         {layer.type === 'image' && layer.image && (
@@ -315,13 +340,140 @@ export function PropertiesPanel({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+  action,
+}: {
+  title: string;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
   return (
     <div>
-      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-accent-soft">
-        {title}
-      </h3>
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-accent-soft">
+          {title}
+        </h3>
+        {action}
+      </div>
       <div className="space-y-2">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Fullscreen HTML/CSS editor for an `html` layer: large side-by-side HTML and
+ * CSS panes, an image inserter (upload / pick from the media library inserts an
+ * <img> at the cursor), and the data-token cheat sheet.
+ */
+function HtmlCssEditor({
+  html,
+  css,
+  slots,
+  onChangeHtml,
+  onChangeCss,
+  onClose,
+}: {
+  html: string;
+  css: string;
+  slots: OverlaySlot[];
+  onChangeHtml: (html: string) => void;
+  onChangeCss: (css: string) => void;
+  onClose: () => void;
+}) {
+  const htmlRef = useRef<HTMLTextAreaElement>(null);
+  const [showImages, setShowImages] = useState(false);
+
+  function insertImage(url: string) {
+    const snippet = `<img src="${url}" />`;
+    const el = htmlRef.current;
+    if (!el) {
+      onChangeHtml(html + snippet);
+      return;
+    }
+    const start = el.selectionStart ?? html.length;
+    const end = el.selectionEnd ?? html.length;
+    const next = html.slice(0, start) + snippet + html.slice(end);
+    onChangeHtml(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + snippet.length;
+      el.setSelectionRange(pos, pos);
+    });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-black/70 backdrop-blur-sm"
+      onMouseDown={onClose}
+    >
+      <div
+        className="panel m-4 flex flex-1 flex-col overflow-hidden"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-ink-600 px-5 py-3">
+          <h2 className="text-base font-semibold">HTML / CSS editor</h2>
+          <div className="flex items-center gap-2">
+            <button
+              className="btn-ghost text-xs"
+              onClick={() => setShowImages((v) => !v)}
+            >
+              <ImagePlus size={14} /> Insert image
+            </button>
+            <button className="text-text-faint hover:text-text" onClick={onClose} title="Close">
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        {showImages && (
+          <div className="border-b border-ink-600 bg-ink-850 px-5 py-3">
+            <MediaPicker value="" onSelect={(url) => insertImage(url)} />
+            <p className="mt-1 text-[11px] text-text-faint">
+              Selecting an image inserts an &lt;img&gt; at the cursor. You can also reference any
+              asset by its /assets/… URL.
+            </p>
+          </div>
+        )}
+
+        <div className="grid flex-1 grid-cols-2 gap-px overflow-hidden bg-ink-600">
+          <div className="flex flex-col bg-ink-900">
+            <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-accent-soft">
+              HTML
+            </div>
+            <textarea
+              ref={htmlRef}
+              className="flex-1 resize-none bg-transparent px-4 pb-4 font-mono text-xs text-text outline-none"
+              spellCheck={false}
+              value={html}
+              placeholder="<div>…</div>"
+              onChange={(e) => onChangeHtml(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col bg-ink-900">
+            <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-accent-soft">
+              CSS
+            </div>
+            <textarea
+              className="flex-1 resize-none bg-transparent px-4 pb-4 font-mono text-xs text-text outline-none"
+              spellCheck={false}
+              value={css}
+              placeholder=".box { color: #fff; }"
+              onChange={(e) => onChangeCss(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-ink-600 px-5 py-2 text-[11px] text-text-faint">
+          <span>Live tokens:</span>
+          <code className="font-mono text-text-muted">{'{{map.team_ct.score}}'}</code>
+          <code className="font-mono text-text-muted">{'{{players.ct.1.state.health}}'}</code>
+          {slots.map((s) => (
+            <code key={s.id} className="font-mono text-text-muted">{`{{${s.id}.gsi.…}}`}</code>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
