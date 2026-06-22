@@ -181,6 +181,10 @@ function LayerContent({
     );
   }
 
+  if (layer.type === 'html' && layer.html) {
+    return <HtmlLayer html={layer.html.html} css={layer.html.css} title={layer.name} />;
+  }
+
   if (layer.type === 'shape' && layer.shape) {
     const s = layer.shape;
     return (
@@ -200,4 +204,28 @@ function LayerContent({
   void width;
   void height;
   return null;
+}
+
+/**
+ * Renders custom HTML/CSS in an isolated iframe so pasted markup and styles
+ * can't leak into (or collide with) the rest of the overlay. The document is
+ * transparent and non-interactive (overlays are display-only).
+ */
+function HtmlLayer({ html, css, title }: { html: string; css?: string; title: string }) {
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;width:100%;height:100%;background:transparent;overflow:hidden}</style><style>${css ?? ''}</style></head><body>${html}</body></html>`;
+  return (
+    <iframe
+      title={title}
+      srcDoc={doc}
+      sandbox="allow-scripts"
+      scrolling="no"
+      style={{
+        width: '100%',
+        height: '100%',
+        border: 0,
+        background: 'transparent',
+        pointerEvents: 'none',
+      }}
+    />
+  );
 }

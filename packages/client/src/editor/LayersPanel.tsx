@@ -4,6 +4,7 @@ import {
   ChevronUp,
   Eye,
   EyeOff,
+  Code2,
   Image as ImageIcon,
   Lock,
   Plus,
@@ -21,6 +22,7 @@ const LAYER_ICON: Record<LayerType, typeof Type> = {
   gsiText: Variable,
   shape: Square,
   image: ImageIcon,
+  html: Code2,
   group: Square,
 };
 
@@ -29,6 +31,7 @@ const ADD_MENU: { type: LayerType; label: string }[] = [
   { type: 'gsiText', label: 'GSI-bound Text' },
   { type: 'shape', label: 'Shape' },
   { type: 'image', label: 'Image' },
+  { type: 'html', label: 'HTML / CSS' },
 ];
 
 export function LayersPanel({
