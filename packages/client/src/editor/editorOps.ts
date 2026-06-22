@@ -30,6 +30,37 @@ function transform(x = 760, y = 470): LayerTransform {
   };
 }
 
+/** Full-composition transform — code/JSX layers default to filling the stage. */
+function fullTransform(width = 1920, height = 1080): LayerTransform {
+  return {
+    x: prop(0),
+    y: prop(0),
+    width: prop(width),
+    height: prop(height),
+    rotation: prop(0),
+    opacity: prop(1),
+    scale: prop(1),
+  };
+}
+
+const CODE_STARTER = `// Body of a React component. React + hooks are in scope, plus
+// data vars: ctPlayers, tPlayers, allPlayers, gsi, league, map, round.
+const [tick, setTick] = useState(0);
+useEffect(() => {
+  const id = setInterval(() => setTick((t) => t + 1), 1000);
+  return () => clearInterval(id);
+}, []);
+
+return (
+  <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none' }}>
+    <div style={{ position: 'absolute', left: 40, bottom: '6%', color: '#fff',
+      font: '700 40px Inter, sans-serif' }}>
+      CT {map?.team_ct?.score ?? 0} : {map?.team_t?.score ?? 0} T  ·  {tick}s
+    </div>
+  </div>
+);
+`;
+
 /** Keys on the transform object that are animatable numeric tracks. */
 export const TRANSFORM_KEYS: (keyof LayerTransform)[] = [
   'x',
@@ -77,6 +108,10 @@ export function createLayer(type: LayerType): Layer {
         css: '.box {\n  font: 700 48px Inter, sans-serif;\n  color: #fff;\n}',
       };
       break;
+    case 'code':
+      base.transform = fullTransform();
+      base.code = { code: CODE_STARTER };
+      break;
     default:
       break;
   }
@@ -106,6 +141,8 @@ function defaultName(type: LayerType): string {
       return 'Image';
     case 'html':
       return 'HTML';
+    case 'code':
+      return 'JSX / Code';
     case 'group':
       return 'Group';
     default:

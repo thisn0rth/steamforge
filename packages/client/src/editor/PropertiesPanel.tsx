@@ -31,6 +31,7 @@ export function PropertiesPanel({
   onToggleKeyframe: (key: keyof LayerTransform) => void;
 }) {
   const [htmlEditorOpen, setHtmlEditorOpen] = useState(false);
+  const [codeEditorOpen, setCodeEditorOpen] = useState(false);
 
   if (!layer) {
     return (
@@ -299,6 +300,44 @@ export function PropertiesPanel({
           />
         )}
 
+        {layer.type === 'code' && layer.code && (
+          <Section
+            title="JSX / Code"
+            action={
+              <button
+                className="flex items-center gap-1 text-[11px] text-text-faint hover:text-text"
+                onClick={() => setCodeEditorOpen(true)}
+                title="Open fullscreen editor"
+              >
+                <Maximize2 size={12} /> Expand
+              </button>
+            }
+          >
+            <Field label="Component body (returns JSX)">
+              <textarea
+                className="input min-h-[160px] resize-y font-mono text-xs"
+                spellCheck={false}
+                value={layer.code.code}
+                onChange={(e) => patch({ code: { ...layer.code!, code: e.target.value } })}
+              />
+            </Field>
+            <p className="text-[11px] text-text-faint">
+              React + hooks in scope; data vars: <code className="font-mono">ctPlayers</code>,{' '}
+              <code className="font-mono">tPlayers</code>, <code className="font-mono">gsi</code>,{' '}
+              <code className="font-mono">league</code>, <code className="font-mono">map</code>. Fills
+              the composition (position: fixed / 100vw work).
+            </p>
+          </Section>
+        )}
+
+        {layer.type === 'code' && layer.code && codeEditorOpen && (
+          <CodeEditor
+            code={layer.code.code}
+            onChange={(code) => patch({ code: { ...layer.code!, code } })}
+            onClose={() => setCodeEditorOpen(false)}
+          />
+        )}
+
         {layer.type === 'image' && layer.image && (
           <Section title="Image">
             <Field label="Media">
@@ -335,6 +374,55 @@ export function PropertiesPanel({
             </Field>
           </Section>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Fullscreen editor for a JSX/code layer: one large pane plus a cheat sheet of
+ * the data variables available to the component.
+ */
+function CodeEditor({
+  code,
+  onChange,
+  onClose,
+}: {
+  code: string;
+  onChange: (code: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-black/70 backdrop-blur-sm"
+      onMouseDown={onClose}
+    >
+      <div
+        className="panel m-4 flex flex-1 flex-col overflow-hidden"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-ink-600 px-5 py-3">
+          <h2 className="text-base font-semibold">JSX / Code editor</h2>
+          <button className="text-text-faint hover:text-text" onClick={onClose} title="Close">
+            <X size={18} />
+          </button>
+        </div>
+        <textarea
+          className="flex-1 resize-none bg-ink-900 px-5 py-4 font-mono text-xs text-text outline-none"
+          spellCheck={false}
+          value={code}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-ink-600 px-5 py-2 text-[11px] text-text-faint">
+          <span>In scope:</span>
+          <code className="font-mono text-text-muted">React + hooks</code>
+          <code className="font-mono text-text-muted">ctPlayers / tPlayers / allPlayers</code>
+          <code className="font-mono text-text-muted">gsi</code>
+          <code className="font-mono text-text-muted">league</code>
+          <code className="font-mono text-text-muted">map</code>
+          <code className="font-mono text-text-muted">round</code>
+          <code className="font-mono text-text-muted">assignments</code>
+        </div>
       </div>
     </div>
   );

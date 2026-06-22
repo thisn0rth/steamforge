@@ -10,6 +10,7 @@ import type {
 } from '@streamforge/shared';
 import { resolveBindingText, resolveTemplate } from '@streamforge/shared';
 import { numAt, strAt } from './evaluate';
+import { CodeLayer } from './CodeLayer';
 
 /**
  * Renders an overlay composition at native resolution and time `timeMs`.
@@ -184,6 +185,10 @@ function LayerContent({
 
   if (layer.type === 'html' && layer.html) {
     return <HtmlLayer html={layer.html.html} css={layer.html.css} ctx={ctx} />;
+  }
+
+  if (layer.type === 'code' && layer.code) {
+    return <CodeLayer code={layer.code.code} ctx={ctx} />;
   }
 
   if (layer.type === 'shape' && layer.shape) {

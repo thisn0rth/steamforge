@@ -8,7 +8,7 @@
  * GSI data via data bindings.
  */
 
-export type LayerType = 'text' | 'image' | 'shape' | 'gsiText' | 'group' | 'html';
+export type LayerType = 'text' | 'image' | 'shape' | 'gsiText' | 'group' | 'html' | 'code';
 
 export type EasingKind = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'hold';
 
@@ -71,6 +71,19 @@ export interface HtmlLayerProps {
 }
 
 /**
+ * A custom JSX/React layer: the operator writes the body of a React function
+ * component (helper components + a final `return ( <jsx/> )`). It renders in an
+ * isolated iframe with React + hooks in scope and a live data object
+ * (`gsi`, `league`, `ctPlayers`, `tPlayers`, `allPlayers`, `map`, `round`,
+ * `assignments`) injected as variables, so it can run interactions/animations
+ * and re-renders as data changes. Sized to the layer box (defaults to the full
+ * composition) so `position: fixed` + `100vw/100vh` map to the overlay.
+ */
+export interface CodeLayerProps {
+  code: string;
+}
+
+/**
  * Binds a layer's content to data. Two modes:
  *
  * 1. Direct GSI: `path` is a path into the live GSI payload, e.g.
@@ -117,6 +130,7 @@ export interface Layer {
   image?: ImageLayerProps;
   shape?: ShapeLayerProps;
   html?: HtmlLayerProps;
+  code?: CodeLayerProps;
   binding?: GsiBinding;
   /** Child layer ids for `group` layers. */
   children?: string[];
