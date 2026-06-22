@@ -8,7 +8,7 @@
  * GSI data via data bindings.
  */
 
-export type LayerType = 'text' | 'image' | 'shape' | 'gsiText' | 'group';
+export type LayerType = 'text' | 'image' | 'shape' | 'gsiText' | 'group' | 'html';
 
 export type EasingKind = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'hold';
 
@@ -61,6 +61,16 @@ export interface ShapeLayerProps {
 }
 
 /**
+ * A custom HTML/CSS layer: the operator pastes raw markup (and optional CSS)
+ * that renders inside an isolated iframe, sized/positioned/animated by the
+ * layer transform like any other element.
+ */
+export interface HtmlLayerProps {
+  html: string;
+  css?: string;
+}
+
+/**
  * Binds a layer's content to data. Two modes:
  *
  * 1. Direct GSI: `path` is a path into the live GSI payload, e.g.
@@ -106,6 +116,7 @@ export interface Layer {
   text?: TextLayerProps;
   image?: ImageLayerProps;
   shape?: ShapeLayerProps;
+  html?: HtmlLayerProps;
   binding?: GsiBinding;
   /** Child layer ids for `group` layers. */
   children?: string[];

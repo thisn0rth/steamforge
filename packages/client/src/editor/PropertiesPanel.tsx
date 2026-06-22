@@ -233,6 +233,32 @@ export function PropertiesPanel({
           </Section>
         )}
 
+        {layer.type === 'html' && layer.html && (
+          <Section title="HTML / CSS">
+            <Field label="HTML">
+              <textarea
+                className="input min-h-[120px] resize-y font-mono text-xs"
+                spellCheck={false}
+                value={layer.html.html}
+                placeholder="<div>…</div>"
+                onChange={(e) => patch({ html: { ...layer.html!, html: e.target.value } })}
+              />
+            </Field>
+            <Field label="CSS">
+              <textarea
+                className="input min-h-[120px] resize-y font-mono text-xs"
+                spellCheck={false}
+                value={layer.html.css ?? ''}
+                placeholder=".box { color: #fff; }"
+                onChange={(e) => patch({ html: { ...layer.html!, css: e.target.value } })}
+              />
+            </Field>
+            <p className="text-[11px] text-text-faint">
+              Renders in an isolated frame; CSS only affects this layer.
+            </p>
+          </Section>
+        )}
+
         {layer.type === 'image' && layer.image && (
           <Section title="Image">
             <Field label="Media">

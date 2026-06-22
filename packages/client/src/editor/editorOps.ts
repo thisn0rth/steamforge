@@ -71,6 +71,12 @@ export function createLayer(type: LayerType): Layer {
     case 'image':
       base.image = { src: '', fit: 'contain' };
       break;
+    case 'html':
+      base.html = {
+        html: '<div class="box">Hello</div>',
+        css: '.box {\n  font: 700 48px Inter, sans-serif;\n  color: #fff;\n}',
+      };
+      break;
     default:
       break;
   }
@@ -98,6 +104,8 @@ function defaultName(type: LayerType): string {
       return 'Shape';
     case 'image':
       return 'Image';
+    case 'html':
+      return 'HTML';
     case 'group':
       return 'Group';
     default:
