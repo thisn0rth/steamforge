@@ -73,7 +73,7 @@ export function createLayer(type: LayerType): Layer {
       break;
     case 'html':
       base.html = {
-        html: '<div class="box">Hello</div>',
+        html: '<div class="box">CT {{map.team_ct.score || 0}}</div>',
         css: '.box {\n  font: 700 48px Inter, sans-serif;\n  color: #fff;\n}',
       };
       break;

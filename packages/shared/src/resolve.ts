@@ -62,3 +62,43 @@ export function resolveBindingText(binding: GsiBinding, ctx: ResolveContext): st
   const value = String(raw);
   return binding.template ? binding.template.replace('{value}', value) : value;
 }
+
+const TEMPLATE_TOKEN = /\{\{\s*([^}]+?)\s*\}\}/g;
+
+/**
+ * Resolve `{{ ... }}` data tokens embedded in arbitrary text (used by HTML/CSS
+ * layers). Each token is a binding expression:
+ *
+ *   {{map.team_ct.score}}            direct GSI path
+ *   {{players.ct.1.state.health}}    virtual player namespace
+ *   {{focus.gsi.state.health}}       slot-relative live GSI (slot id "focus")
+ *   {{focus.fs.avgKills}}            slot-relative Firestore league field
+ *   {{map.team_ct.score || 0}}       with a fallback after "||"
+ *
+ * A token whose first segment matches a declared slot id and is followed by
+ * `gsi.`/`fs.` resolves against that slot's assignment; otherwise it's a direct
+ * GSI path. Unresolved tokens become the fallback (or empty string).
+ */
+export function resolveTemplate(text: string, ctx: ResolveContext): string {
+  return text.replace(TEMPLATE_TOKEN, (_match, expr: string) => {
+    const [pathPart, ...fallbackParts] = String(expr).split('||');
+    const fallback = fallbackParts.join('||').trim();
+    const binding = tokenToBinding(pathPart.trim(), ctx);
+    const raw = resolveDataValue(binding, ctx);
+    if (raw == null || raw === '') return fallback;
+    return String(raw);
+  });
+}
+
+function tokenToBinding(expr: string, ctx: ResolveContext): GsiBinding {
+  const dot = expr.indexOf('.');
+  if (dot > 0) {
+    const head = expr.slice(0, dot);
+    const rest = expr.slice(dot + 1);
+    const isSlot = ctx.slots?.some((s) => s.id === head);
+    if (isSlot && (rest.startsWith('gsi.') || rest.startsWith('fs.'))) {
+      return { slotId: head, path: rest };
+    }
+  }
+  return { path: expr };
+}

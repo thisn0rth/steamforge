@@ -253,9 +253,24 @@ export function PropertiesPanel({
                 onChange={(e) => patch({ html: { ...layer.html!, css: e.target.value } })}
               />
             </Field>
-            <p className="text-[11px] text-text-faint">
-              Renders in an isolated frame; CSS only affects this layer.
-            </p>
+            <div className="space-y-1 text-[11px] text-text-faint">
+              <p>Scoped to this layer. Embed live data with tokens, e.g.</p>
+              <p className="font-mono text-text-muted">
+                {'{{map.team_ct.score}}'} · {'{{players.ct.1.state.health}}'}
+              </p>
+              {slots.length > 0 ? (
+                <p>
+                  Slots:{' '}
+                  {slots.map((s) => (
+                    <code key={s.id} className="font-mono text-text-muted">
+                      {`{{${s.id}.gsi.…}}`}{' '}
+                    </code>
+                  ))}
+                </p>
+              ) : (
+                <p>Add slots to use {'{{<slot>.gsi.…}}'} / {'{{<slot>.fs.…}}'} focus tokens.</p>
+              )}
+            </div>
           </Section>
         )}
 
