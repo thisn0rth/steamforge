@@ -59,6 +59,7 @@ const emptyObs: ObsState = {
   recording: { active: false, paused: false, durationMs: 0 },
   stats: null,
   replayBuffer: { active: false, saving: false },
+  overlaySource: { name: 'Overlay', autoSwitch: true },
 };
 
 let socket: RealtimeSocket | null = null;

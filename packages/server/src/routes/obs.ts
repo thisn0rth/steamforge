@@ -28,6 +28,20 @@ obsRouter.post('/api/obs/disconnect', async (req, res) => {
   res.json(obsService.state());
 });
 
+obsRouter.post('/api/obs/overlay-source', (req, res) => {
+  const { name, autoSwitch } = req.body ?? {};
+  if (name != null && typeof name !== 'string') {
+    res.status(400).json({ error: 'name must be a string' });
+    return;
+  }
+  if (autoSwitch != null && typeof autoSwitch !== 'boolean') {
+    res.status(400).json({ error: 'autoSwitch must be a boolean' });
+    return;
+  }
+  obsService.setOverlaySource({ name, autoSwitch });
+  res.json(obsService.state());
+});
+
 obsRouter.post('/api/obs/refresh', async (_req, res) => {
   try {
     await obsService.refresh();

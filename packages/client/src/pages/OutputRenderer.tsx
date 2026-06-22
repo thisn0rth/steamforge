@@ -5,7 +5,6 @@ import type {
   OutputChannel,
   OutputState,
   Overlay,
-  OverlayAssignments,
 } from '@streamforge/shared';
 import { EMPTY_OUTPUT_STATE } from '@streamforge/shared';
 import { api } from '@/lib/api';
@@ -23,7 +22,6 @@ export function OutputRenderer({ channel }: { channel: OutputChannel }) {
   const [overlays, setOverlays] = useState<Record<string, Overlay>>({});
   const [gsi, setGsi] = useState<GsiPayload | null>(null);
   const [league, setLeague] = useState<LeagueData | null>(null);
-  const [assignments, setAssignments] = useState<Record<string, OverlayAssignments>>({});
   const [time, setTime] = useState(0);
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
   const startRef = useRef<number>(performance.now());
@@ -35,7 +33,6 @@ export function OutputRenderer({ channel }: { channel: OutputChannel }) {
       if (msg.type === 'output') setOutput(msg.output);
       if (msg.type === 'gsi') setGsi(msg.payload);
       if (msg.type === 'league') setLeague(msg.league);
-      if (msg.type === 'assignments') setAssignments(msg.assignments);
       if (msg.type === 'overlayUpdated') {
         setOverlays((prev) =>
           prev[msg.overlay.id] ? { ...prev, [msg.overlay.id]: msg.overlay } : prev,
@@ -47,12 +44,12 @@ export function OutputRenderer({ channel }: { channel: OutputChannel }) {
     api.output().then(setOutput).catch(() => undefined);
     api.gsiCurrent().then((g) => g && setGsi(g)).catch(() => undefined);
     api.league().then(setLeague).catch(() => undefined);
-    api.assignments().then(setAssignments).catch(() => undefined);
     return () => socket.close();
   }, []);
 
   // Fetch overlay definitions for any ids currently on this channel.
-  const ids = output[channel];
+  const items = output[channel];
+  const ids = items.map((i) => i.overlayId);
   useEffect(() => {
     const missing = ids.filter((id) => !overlays[id]);
     if (missing.length === 0) return;
@@ -68,7 +65,8 @@ export function OutputRenderer({ channel }: { channel: OutputChannel }) {
     return () => {
       cancelled = true;
     };
-  }, [ids, overlays]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ids.join(','), overlays]);
 
   // Shared timeline clock.
   useEffect(() => {
@@ -87,11 +85,15 @@ export function OutputRenderer({ channel }: { channel: OutputChannel }) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const active = ids.map((id) => overlays[id]).filter((o): o is Overlay => Boolean(o));
+  const active = items
+    .map((item) => ({ overlay: overlays[item.overlayId], assignments: item.assignments }))
+    .filter((a): a is { overlay: Overlay; assignments: typeof a.assignments } =>
+      Boolean(a.overlay),
+    );
 
   return (
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden' }}>
-      {active.map((overlay) => {
+      {active.map(({ overlay, assignments }) => {
         const dur = overlay.composition.duration || 1;
         const scale = Math.min(
           size.w / overlay.composition.width,
@@ -104,7 +106,7 @@ export function OutputRenderer({ channel }: { channel: OutputChannel }) {
               timeMs={time % dur}
               gsi={gsi}
               league={league}
-              assignments={assignments[overlay.id]}
+              assignments={assignments}
               scale={scale}
             />
           </div>

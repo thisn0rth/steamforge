@@ -1,12 +1,18 @@
 import fs from 'node:fs';
-import type { OutputChannel, OutputState } from '@streamforge/shared';
+import type {
+  OutputChannel,
+  OutputItem,
+  OutputState,
+  OverlayAssignments,
+} from '@streamforge/shared';
 import { EMPTY_OUTPUT_STATE } from '@streamforge/shared';
 import { dataPath } from '../config.js';
 
 /**
  * Persists the live output state: which overlays are on the program (live) and
- * preview channels. A single `/live` and `/preview` render page reads this, so
- * OBS only needs one browser source per channel.
+ * preview channels, plus the focus assignments chosen for each push. A single
+ * `/live` and `/preview` render page reads this, so OBS only needs one browser
+ * source per channel.
  */
 class OutputStore {
   private readonly file = dataPath('output.json');
@@ -16,8 +22,8 @@ class OutputStore {
     try {
       const raw = JSON.parse(fs.readFileSync(this.file, 'utf8')) as Partial<OutputState>;
       this.state = {
-        program: Array.isArray(raw.program) ? raw.program : [],
-        preview: Array.isArray(raw.preview) ? raw.preview : [],
+        program: normalize(raw.program),
+        preview: normalize(raw.preview),
       };
     } catch {
       this.state = { ...EMPTY_OUTPUT_STATE };
@@ -25,7 +31,10 @@ class OutputStore {
   }
 
   get(): OutputState {
-    return { program: [...this.state.program], preview: [...this.state.preview] };
+    return {
+      program: this.state.program.map((i) => ({ ...i })),
+      preview: this.state.preview.map((i) => ({ ...i })),
+    };
   }
 
   private persist(): void {
@@ -34,60 +43,69 @@ class OutputStore {
     fs.renameSync(tmp, this.file);
   }
 
-  private set(next: OutputState): OutputState {
-    this.state = {
-      program: [...new Set(next.program)],
-      preview: [...new Set(next.preview)],
-    };
+  private commit(): OutputState {
     this.persist();
     return this.get();
   }
 
-  replace(next: Partial<OutputState>): OutputState {
-    return this.set({
-      program: next.program ?? this.state.program,
-      preview: next.preview ?? this.state.preview,
-    });
-  }
-
-  /** Add an overlay to a channel (top of the stack). */
-  add(channel: OutputChannel, overlayId: string): OutputState {
-    const list = this.state[channel].filter((id) => id !== overlayId);
-    list.push(overlayId);
-    return this.set({ ...this.state, [channel]: list });
+  /** Add an overlay to a channel (top of the stack) with its focus assignments. */
+  add(channel: OutputChannel, overlayId: string, assignments: OverlayAssignments): OutputState {
+    const list = this.state[channel].filter((i) => i.overlayId !== overlayId);
+    list.push({ overlayId, assignments });
+    this.state[channel] = list;
+    return this.commit();
   }
 
   remove(channel: OutputChannel, overlayId: string): OutputState {
-    return this.set({
-      ...this.state,
-      [channel]: this.state[channel].filter((id) => id !== overlayId),
-    });
-  }
-
-  /** Toggle an overlay's presence on a channel. */
-  toggle(channel: OutputChannel, overlayId: string): OutputState {
-    return this.state[channel].includes(overlayId)
-      ? this.remove(channel, overlayId)
-      : this.add(channel, overlayId);
+    this.state[channel] = this.state[channel].filter((i) => i.overlayId !== overlayId);
+    return this.commit();
   }
 
   clear(channel: OutputChannel | 'all'): OutputState {
-    if (channel === 'all') return this.set({ program: [], preview: [] });
-    return this.set({ ...this.state, [channel]: [] });
+    if (channel === 'all') {
+      this.state = { program: [], preview: [] };
+    } else {
+      this.state[channel] = [];
+    }
+    return this.commit();
   }
 
-  /** Push the preview stack to the live/program output. */
+  /** Push the preview stack (with its assignments) to the live/program output. */
   take(): OutputState {
-    return this.set({ program: [...this.state.preview], preview: this.state.preview });
+    this.state.program = this.state.preview.map((i) => ({ ...i }));
+    return this.commit();
   }
 
-  /** Drop any references to an overlay that no longer exists. */
+  /** Drop any references to overlays that no longer exist. */
   prune(validIds: Set<string>): OutputState {
-    return this.set({
-      program: this.state.program.filter((id) => validIds.has(id)),
-      preview: this.state.preview.filter((id) => validIds.has(id)),
-    });
+    this.state.program = this.state.program.filter((i) => validIds.has(i.overlayId));
+    this.state.preview = this.state.preview.filter((i) => validIds.has(i.overlayId));
+    return this.commit();
   }
+}
+
+function normalize(list: unknown): OutputItem[] {
+  if (!Array.isArray(list)) return [];
+  const out: OutputItem[] = [];
+  for (const entry of list) {
+    if (typeof entry === 'string') {
+      out.push({ overlayId: entry, assignments: {} });
+    } else if (entry && typeof entry === 'object' && 'overlayId' in entry) {
+      const item = entry as { overlayId: unknown; assignments?: unknown };
+      if (typeof item.overlayId === 'string') {
+        out.push({
+          overlayId: item.overlayId,
+          assignments: (item.assignments as OverlayAssignments) ?? {},
+        });
+      }
+    }
+  }
+  // De-dupe by overlayId, keeping the last occurrence.
+  const seen = new Set<string>();
+  return out
+    .reverse()
+    .filter((i) => (seen.has(i.overlayId) ? false : (seen.add(i.overlayId), true)))
+    .reverse();
 }
 
 export const outputStore = new OutputStore();

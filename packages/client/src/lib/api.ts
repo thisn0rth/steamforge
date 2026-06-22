@@ -70,6 +70,11 @@ export const api = {
     }),
   obsDisconnect: () => http<ObsState>('/api/obs/disconnect', { method: 'POST' }),
   obsRefresh: () => http<ObsState>('/api/obs/refresh', { method: 'POST' }),
+  obsSetOverlaySource: (patch: { name?: string; autoSwitch?: boolean }) =>
+    http<ObsState>('/api/obs/overlay-source', {
+      method: 'POST',
+      body: JSON.stringify(patch),
+    }),
   obsSetScene: (sceneName: string, preview = false) =>
     http<ObsState>('/api/obs/scene', {
       method: 'POST',
@@ -148,13 +153,15 @@ export const api = {
 
   // Live output (single /live + /preview render endpoints)
   output: () => http<OutputState>('/api/output'),
-  setOutput: (state: Partial<OutputState>) =>
-    http<OutputState>('/api/output', { method: 'PUT', body: JSON.stringify(state) }),
-  pushOutput: (channel: OutputChannel, overlayId: string, toggle = false) =>
-    http<OutputState>(
-      `/api/output/${channel}/${overlayId}${toggle ? '?toggle=1' : ''}`,
-      { method: 'POST' },
-    ),
+  pushOutput: (
+    channel: OutputChannel,
+    overlayId: string,
+    assignments: OverlayAssignments = {},
+  ) =>
+    http<OutputState>(`/api/output/${channel}/${overlayId}`, {
+      method: 'POST',
+      body: JSON.stringify({ assignments }),
+    }),
   removeOutput: (channel: OutputChannel, overlayId: string) =>
     http<OutputState>(`/api/output/${channel}/${overlayId}`, { method: 'DELETE' }),
   takeOutput: () => http<OutputState>('/api/output/take', { method: 'POST' }),

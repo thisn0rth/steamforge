@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRightLeft, Copy, Crosshair, Eye, Pencil, Plus, Radio, Trash2, X } from 'lucide-react';
-import type { Overlay } from '@streamforge/shared';
+import { ArrowRightLeft, Copy, Eye, Pencil, Plus, Radio, Trash2, X } from 'lucide-react';
+import type { Overlay, OutputChannel, OverlayAssignments } from '@streamforge/shared';
 import { PageHeader } from '@/components/PageHeader';
-import { Modal } from '@/components/Modal';
-import { FocusControls } from '@/components/FocusControls';
+import { FocusPickerModal } from '@/components/FocusPickerModal';
 import { api } from '@/lib/api';
 import { useStore } from '@/store/useStore';
 import { OverlayCanvas } from '@/overlay/OverlayCanvas';
@@ -12,7 +11,19 @@ import { OverlayCanvas } from '@/overlay/OverlayCanvas';
 export function OverlaysPage() {
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [creating, setCreating] = useState(false);
-  const [focusOverlay, setFocusOverlay] = useState<Overlay | null>(null);
+  const [pending, setPending] = useState<{ overlay: Overlay; channel: OutputChannel } | null>(
+    null,
+  );
+
+  // Pushing an overlay with slots first asks for focus (per-push); otherwise
+  // it pushes immediately.
+  function push(overlay: Overlay, channel: OutputChannel) {
+    if (overlay.slots && overlay.slots.length > 0) {
+      setPending({ overlay, channel });
+    } else {
+      void api.pushOutput(channel, overlay.id);
+    }
+  }
 
   async function load() {
     setOverlays(await api.overlays());
@@ -72,16 +83,7 @@ export function OverlaysPage() {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                <OutputToggles overlayId={o.id} />
-                {o.slots && o.slots.length > 0 && (
-                  <button
-                    className="rounded-md p-2 text-text-faint hover:bg-ink-700 hover:text-accent"
-                    title="Set focus (assign players/teams to slots)"
-                    onClick={() => setFocusOverlay(o)}
-                  >
-                    <Crosshair size={15} />
-                  </button>
-                )}
+                <OutputToggles overlay={o} onPush={push} />
                 <button
                   className="rounded-md p-2 text-text-faint hover:bg-ink-700 hover:text-text"
                   title="Copy browser-source URL"
@@ -117,21 +119,29 @@ export function OverlaysPage() {
         </button>
       </div>
 
-      <Modal
-        open={focusOverlay != null}
-        title={focusOverlay ? `Focus · ${focusOverlay.name}` : 'Focus'}
-        onClose={() => setFocusOverlay(null)}
-      >
-        {focusOverlay && <FocusControls overlay={focusOverlay} />}
-      </Modal>
+      <FocusPickerModal
+        overlay={pending?.overlay ?? null}
+        channel={pending?.channel ?? 'preview'}
+        onClose={() => setPending(null)}
+        onConfirm={(assignments: OverlayAssignments) => {
+          if (pending) void api.pushOutput(pending.channel, pending.overlay.id, assignments);
+          setPending(null);
+        }}
+      />
     </div>
   );
 }
 
-function OutputToggles({ overlayId }: { overlayId: string }) {
+function OutputToggles({
+  overlay,
+  onPush,
+}: {
+  overlay: Overlay;
+  onPush: (overlay: Overlay, channel: OutputChannel) => void;
+}) {
   const output = useStore((s) => s.output);
-  const onPreview = output.preview.includes(overlayId);
-  const onProgram = output.program.includes(overlayId);
+  const onPreview = output.preview.some((i) => i.overlayId === overlay.id);
+  const onProgram = output.program.some((i) => i.overlayId === overlay.id);
   return (
     <>
       <button
@@ -140,9 +150,7 @@ function OutputToggles({ overlayId }: { overlayId: string }) {
         }`}
         title={onPreview ? 'On Preview — click to remove' : 'Push to Preview'}
         onClick={() =>
-          void (onPreview
-            ? api.removeOutput('preview', overlayId)
-            : api.pushOutput('preview', overlayId))}
+          onPreview ? void api.removeOutput('preview', overlay.id) : onPush(overlay, 'preview')}
       >
         <Eye size={15} />
       </button>
@@ -152,9 +160,7 @@ function OutputToggles({ overlayId }: { overlayId: string }) {
         }`}
         title={onProgram ? 'On Live — click to remove' : 'Push to Live'}
         onClick={() =>
-          void (onProgram
-            ? api.removeOutput('program', overlayId)
-            : api.pushOutput('program', overlayId))}
+          onProgram ? void api.removeOutput('program', overlay.id) : onPush(overlay, 'program')}
       >
         <Radio size={15} />
       </button>
@@ -175,7 +181,7 @@ function OutputBar({ overlays }: { overlays: Overlay[] }) {
       <Channel
         label="Preview"
         color="text-teal"
-        ids={output.preview}
+        ids={output.preview.map((i) => i.overlayId)}
         nameOf={nameOf}
         onRemove={(id) => void api.removeOutput('preview', id)}
       />
@@ -184,13 +190,14 @@ function OutputBar({ overlays }: { overlays: Overlay[] }) {
         title="Push Preview to Live"
         disabled={output.preview.length === 0}
         onClick={() => void api.takeOutput()}
+        type="button"
       >
         <ArrowRightLeft size={15} /> TAKE
       </button>
       <Channel
         label="Live"
         color="text-live"
-        ids={output.program}
+        ids={output.program.map((i) => i.overlayId)}
         nameOf={nameOf}
         onRemove={(id) => void api.removeOutput('program', id)}
       />
