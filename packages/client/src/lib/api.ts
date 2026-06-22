@@ -100,10 +100,10 @@ export const api = {
   updateRig: (id: string, rig: Partial<Rig>) =>
     http<Rig>(`/api/rigs/${id}`, { method: 'PUT', body: JSON.stringify(rig) }),
   deleteRig: (id: string) => http<void>(`/api/rigs/${id}`, { method: 'DELETE' }),
-  activateRig: (id: string) =>
+  activateRig: (id: string, assignments: Record<string, OverlayAssignments> = {}) =>
     http<{ rigId: string; appliedScene: string; toggledSources: number; warnings: string[] }>(
       `/api/rigs/${id}/activate`,
-      { method: 'POST' },
+      { method: 'POST', body: JSON.stringify({ assignments }) },
     ),
 
   // Overlays

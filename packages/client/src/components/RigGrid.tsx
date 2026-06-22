@@ -1,10 +1,19 @@
 import { useMemo, useState } from 'react';
 import { Pencil, Plus, Search, Zap } from 'lucide-react';
 import clsx from 'clsx';
-import type { Rig } from '@streamforge/shared';
+import type { Overlay, OverlayAssignments, Rig } from '@streamforge/shared';
 import { useStore } from '@/store/useStore';
 import { api } from '@/lib/api';
 import { RigEditorModal } from '@/components/RigEditorModal';
+import { FocusPickerModal } from '@/components/FocusPickerModal';
+
+/** Sequential data-binding prompt for a rig's slot overlays before staging. */
+interface PendingRig {
+  rig: Rig;
+  slotOverlays: Overlay[];
+  index: number;
+  assignments: Record<string, OverlayAssignments>;
+}
 
 export function RigGrid() {
   const rigs = useStore((s) => s.rigs);
@@ -15,6 +24,7 @@ export function RigGrid() {
   const [activating, setActivating] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [pending, setPending] = useState<PendingRig | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -26,16 +36,55 @@ export function RigGrid() {
     );
   }, [rigs, query]);
 
+  // Staging a rig prompts for the data binding of each slot overlay first
+  // (per the live workflow), then stages everything to Preview.
   async function activate(rig: Rig) {
-    setActivating(rig.id);
     setWarning(null);
+    if (rig.overlays.length === 0) {
+      await stageRig(rig, {});
+      return;
+    }
+    setActivating(rig.id);
     try {
-      const result = await api.activateRig(rig.id);
+      const defs = await api.overlays();
+      const enabledIds = new Set(rig.overlays.filter((o) => o.enabled).map((o) => o.overlayId));
+      const slotOverlays = defs.filter(
+        (o) => enabledIds.has(o.id) && (o.slots?.length ?? 0) > 0,
+      );
+      if (slotOverlays.length === 0) {
+        await stageRig(rig, {});
+        return;
+      }
+      setPending({ rig, slotOverlays, index: 0, assignments: {} });
+    } catch (err) {
+      setWarning(err instanceof Error ? err.message : 'Failed to load rig overlays');
+      setActivating(null);
+    }
+  }
+
+  async function stageRig(rig: Rig, assignments: Record<string, OverlayAssignments>) {
+    setActivating(rig.id);
+    try {
+      const result = await api.activateRig(rig.id, assignments);
       if (result.warnings.length) setWarning(result.warnings.join(' · '));
     } catch (err) {
       setWarning(err instanceof Error ? err.message : 'Failed to activate rig');
     } finally {
       setActivating(null);
+    }
+  }
+
+  function confirmFocus(assignments: OverlayAssignments) {
+    if (!pending) return;
+    const current = pending.slotOverlays[pending.index];
+    const collected = { ...pending.assignments, [current.id]: assignments };
+    const next = pending.index + 1;
+    if (next >= pending.slotOverlays.length) {
+      const rig = pending.rig;
+      setPending(null);
+      void stageRig(rig, collected);
+    } else {
+      setPending({ ...pending, index: next, assignments: collected });
     }
   }
 
@@ -141,6 +190,18 @@ export function RigGrid() {
           </p>
         )}
       </div>
+
+      {pending && (
+        <FocusPickerModal
+          overlay={pending.slotOverlays[pending.index]}
+          channel="preview"
+          onClose={() => {
+            setPending(null);
+            setActivating(null);
+          }}
+          onConfirm={confirmFocus}
+        />
+      )}
 
       {(creating || editing) && (
         <RigEditorModal

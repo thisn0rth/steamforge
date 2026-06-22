@@ -1,4 +1,4 @@
-import type { Rig } from '@streamforge/shared';
+import type { OverlayAssignments, Rig } from '@streamforge/shared';
 import { obsService } from '../obs/obsService.js';
 import { outputStore } from '../output/outputStore.js';
 import { wsHub } from '../realtime/wsHub.js';
@@ -12,21 +12,39 @@ export interface ApplyRigResult {
 }
 
 /**
- * Applies a rig as a single atomic-ish production action:
+ * Applies a rig as a single staging action. A rig is just a saved (scene +
+ * overlay list); applying it stages everything to PREVIEW — it never goes live
+ * on its own. Pressing TAKE is the only way to commit Preview to Live.
  *   1. select the rig's transition (if mapped to an OBS transition by name)
  *   2. enforce raw source visibility on the target scene
- *   3. drive the rig's overlays through the live output (single "Overlay" source)
- *   4. switch the program scene
+ *   3. stage the rig's overlays to the PREVIEW output (single "Overlay" source)
+ *   4. stage the target scene to Preview
  *
- * OBS being disconnected is non-fatal: we collect warnings and still report
- * what happened so the control surface can show partial results.
+ * `assignments` carries the per-overlay focus chosen at stage time (the data
+ * binding popup); overlays without a binding fall back to an empty assignment.
+ *
+ * OBS being disconnected is non-fatal: we still stage the overlay output so the
+ * Preview render reflects the rig, and collect warnings for the OBS-only bits.
  */
-export async function applyRig(rig: Rig): Promise<ApplyRigResult> {
+export async function applyRig(
+  rig: Rig,
+  assignments: Record<string, OverlayAssignments> = {},
+): Promise<ApplyRigResult> {
   const warnings: string[] = [];
   let toggledSources = 0;
 
+  // Stage overlays to Preview regardless of OBS — this is app-controlled state.
+  if (rig.overlays.length > 0) {
+    const items = rig.overlays
+      .filter((o) => o.enabled)
+      .map((o) => ({ overlayId: o.overlayId, assignments: assignments[o.overlayId] ?? {} }));
+    const state = outputStore.setChannel('preview', items);
+    wsHub.broadcast({ type: 'output', output: state });
+    void obsService.setOverlayChannel('preview');
+  }
+
   if (!obsService.isConnected()) {
-    warnings.push('OBS not connected — rig recorded but not pushed to OBS.');
+    warnings.push('OBS not connected — overlays staged; scene not changed in OBS.');
     return {
       rigId: rig.id,
       appliedScene: rig.targetScene,
@@ -64,20 +82,13 @@ export async function applyRig(rig: Rig): Promise<ApplyRigResult> {
     }
   }
 
-  // 3. Drive overlays through the live output. Overlays are no longer per-scene
-  //    browser sources; the single shared "Overlay" source renders /live.
-  if (rig.overlays.length > 0) {
-    const overlayIds = rig.overlays.filter((o) => o.enabled).map((o) => o.overlayId);
-    const state = outputStore.setChannel('program', overlayIds);
-    wsHub.broadcast({ type: 'output', output: state });
-    void obsService.setOverlayChannel('program');
-  }
-
-  // 4. Switch program scene last so toggles are in place before it's live.
-  try {
-    await obsService.setProgramScene(rig.targetScene);
-  } catch (err) {
-    warnings.push(`Failed to switch scene: ${errMsg(err)}`);
+  // 3. Stage the target scene to Preview (TAKE commits it to Program later).
+  if (rig.targetScene) {
+    try {
+      await obsService.setPreviewScene(rig.targetScene);
+    } catch (err) {
+      warnings.push(`Failed to stage scene: ${errMsg(err)}`);
+    }
   }
 
   await obsService.refresh().catch(() => undefined);

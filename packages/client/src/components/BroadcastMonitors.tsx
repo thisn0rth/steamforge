@@ -19,10 +19,11 @@ export function BroadcastMonitors() {
   const previewScene = obs.scenes.find((s) => s.name === obs.currentPreviewScene);
   const studio = obs.studioModeEnabled;
 
+  // One TAKE: commits the staged scene AND the staged overlays to Live.
   async function take() {
     setBusy(true);
     try {
-      await api.obsTransition(undefined, true);
+      await api.takeOutput();
     } catch {
       // surfaced via OBS state
     } finally {
@@ -62,13 +63,11 @@ export function BroadcastMonitors() {
       <div className="flex flex-row items-center justify-center gap-3 lg:flex-col">
         <button
           onClick={() => void take()}
-          disabled={!studio || busy}
-          title={studio ? 'Send Preview to Program' : 'Enable Studio Mode in OBS to use TAKE'}
+          disabled={busy}
+          title="Send Preview to Program (scene + overlays)"
           className={clsx(
             'flex h-14 w-28 flex-col items-center justify-center rounded-xl border text-sm font-bold uppercase tracking-wide transition lg:h-20 lg:w-20',
-            studio
-              ? 'border-accent/40 bg-accent text-ink-900 hover:bg-accent-soft'
-              : 'cursor-not-allowed border-ink-600 bg-ink-750 text-text-faint',
+            'border-accent/40 bg-accent text-ink-900 hover:bg-accent-soft',
           )}
         >
           <ArrowRightLeft size={18} />

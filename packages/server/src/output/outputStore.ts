@@ -57,14 +57,18 @@ class OutputStore {
   }
 
   /**
-   * Replace a channel's contents with the given overlays, preserving any focus
-   * assignments already chosen for overlays that stay on the channel.
+   * Replace a channel's contents with the given overlays. Per-overlay focus
+   * assignments can be supplied (chosen at stage time); otherwise any
+   * assignment already chosen for an overlay that stays on the channel is kept.
    */
-  setChannel(channel: OutputChannel, overlayIds: string[]): OutputState {
+  setChannel(
+    channel: OutputChannel,
+    items: Array<{ overlayId: string; assignments?: OverlayAssignments }>,
+  ): OutputState {
     const existing = new Map(this.state[channel].map((i) => [i.overlayId, i.assignments]));
-    this.state[channel] = overlayIds.map((overlayId) => ({
+    this.state[channel] = items.map(({ overlayId, assignments }) => ({
       overlayId,
-      assignments: existing.get(overlayId) ?? {},
+      assignments: assignments ?? existing.get(overlayId) ?? {},
     }));
     return this.commit();
   }

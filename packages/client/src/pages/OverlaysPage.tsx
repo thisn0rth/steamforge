@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRightLeft, Copy, Eye, Pencil, Plus, Radio, Trash2, X } from 'lucide-react';
+import { ArrowRightLeft, Copy, Eye, Pencil, Plus, Trash2, X } from 'lucide-react';
 import type { Overlay, OutputChannel, OverlayAssignments } from '@streamforge/shared';
 import { PageHeader } from '@/components/PageHeader';
 import { FocusPickerModal } from '@/components/FocusPickerModal';
@@ -15,13 +15,13 @@ export function OverlaysPage() {
     null,
   );
 
-  // Pushing an overlay with slots first asks for focus (per-push); otherwise
-  // it pushes immediately.
-  function push(overlay: Overlay, channel: OutputChannel) {
+  // Overlays only ever stage to Preview; TAKE is the one path to Live. An
+  // overlay with slots first asks for its focus (per-push), else stages now.
+  function stage(overlay: Overlay) {
     if (overlay.slots && overlay.slots.length > 0) {
-      setPending({ overlay, channel });
+      setPending({ overlay, channel: 'preview' });
     } else {
-      void api.pushOutput(channel, overlay.id);
+      void api.pushOutput('preview', overlay.id);
     }
   }
 
@@ -83,7 +83,7 @@ export function OverlaysPage() {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                <OutputToggles overlay={o} onPush={push} />
+                <OutputToggle overlay={o} onStage={stage} />
                 <button
                   className="rounded-md p-2 text-text-faint hover:bg-ink-700 hover:text-text"
                   title="Copy browser-source URL"
@@ -132,39 +132,26 @@ export function OverlaysPage() {
   );
 }
 
-function OutputToggles({
+function OutputToggle({
   overlay,
-  onPush,
+  onStage,
 }: {
   overlay: Overlay;
-  onPush: (overlay: Overlay, channel: OutputChannel) => void;
+  onStage: (overlay: Overlay) => void;
 }) {
   const output = useStore((s) => s.output);
   const onPreview = output.preview.some((i) => i.overlayId === overlay.id);
-  const onProgram = output.program.some((i) => i.overlayId === overlay.id);
   return (
-    <>
-      <button
-        className={`rounded-md p-2 transition hover:bg-ink-700 ${
-          onPreview ? 'text-teal' : 'text-text-faint hover:text-teal'
-        }`}
-        title={onPreview ? 'On Preview — click to remove' : 'Push to Preview'}
-        onClick={() =>
-          onPreview ? void api.removeOutput('preview', overlay.id) : onPush(overlay, 'preview')}
-      >
-        <Eye size={15} />
-      </button>
-      <button
-        className={`rounded-md p-2 transition hover:bg-ink-700 ${
-          onProgram ? 'text-live' : 'text-text-faint hover:text-live'
-        }`}
-        title={onProgram ? 'On Live — click to remove' : 'Push to Live'}
-        onClick={() =>
-          onProgram ? void api.removeOutput('program', overlay.id) : onPush(overlay, 'program')}
-      >
-        <Radio size={15} />
-      </button>
-    </>
+    <button
+      className={`rounded-md p-2 transition hover:bg-ink-700 ${
+        onPreview ? 'text-teal' : 'text-text-faint hover:text-teal'
+      }`}
+      title={onPreview ? 'In Preview — click to remove' : 'Add to Preview'}
+      onClick={() =>
+        onPreview ? void api.removeOutput('preview', overlay.id) : onStage(overlay)}
+    >
+      <Eye size={15} />
+    </button>
   );
 }
 
