@@ -1,5 +1,7 @@
 import type { Rig } from '@streamforge/shared';
 import { obsService } from '../obs/obsService.js';
+import { outputStore } from '../output/outputStore.js';
+import { wsHub } from '../realtime/wsHub.js';
 import { store } from '../store/store.js';
 
 export interface ApplyRigResult {
@@ -12,8 +14,9 @@ export interface ApplyRigResult {
 /**
  * Applies a rig as a single atomic-ish production action:
  *   1. select the rig's transition (if mapped to an OBS transition by name)
- *   2. enforce overlay + raw source visibility on the target scene
- *   3. switch the program scene
+ *   2. enforce raw source visibility on the target scene
+ *   3. drive the rig's overlays through the live output (single "Overlay" source)
+ *   4. switch the program scene
  *
  * OBS being disconnected is non-fatal: we collect warnings and still report
  * what happened so the control surface can show partial results.
@@ -51,12 +54,8 @@ export async function applyRig(rig: Rig): Promise<ApplyRigResult> {
     }
   }
 
-  // 2. Enforce source + overlay visibility on the target scene.
-  const allStates = [
-    ...rig.sources.map((s) => ({ sourceName: s.sourceName, enabled: s.enabled })),
-    ...rig.overlays.map((o) => ({ sourceName: o.sourceName, enabled: o.enabled })),
-  ];
-  for (const s of allStates) {
+  // 2. Enforce raw OBS source visibility on the target scene.
+  for (const s of rig.sources) {
     try {
       await obsService.setSourceEnabled(rig.targetScene, s.sourceName, s.enabled);
       toggledSources += 1;
@@ -65,7 +64,16 @@ export async function applyRig(rig: Rig): Promise<ApplyRigResult> {
     }
   }
 
-  // 3. Switch program scene last so toggles are in place before it's live.
+  // 3. Drive overlays through the live output. Overlays are no longer per-scene
+  //    browser sources; the single shared "Overlay" source renders /live.
+  if (rig.overlays.length > 0) {
+    const overlayIds = rig.overlays.filter((o) => o.enabled).map((o) => o.overlayId);
+    const state = outputStore.setChannel('program', overlayIds);
+    wsHub.broadcast({ type: 'output', output: state });
+    void obsService.setOverlayChannel('program');
+  }
+
+  // 4. Switch program scene last so toggles are in place before it's live.
   try {
     await obsService.setProgramScene(rig.targetScene);
   } catch (err) {

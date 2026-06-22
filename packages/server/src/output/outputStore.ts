@@ -56,6 +56,19 @@ class OutputStore {
     return this.commit();
   }
 
+  /**
+   * Replace a channel's contents with the given overlays, preserving any focus
+   * assignments already chosen for overlays that stay on the channel.
+   */
+  setChannel(channel: OutputChannel, overlayIds: string[]): OutputState {
+    const existing = new Map(this.state[channel].map((i) => [i.overlayId, i.assignments]));
+    this.state[channel] = overlayIds.map((overlayId) => ({
+      overlayId,
+      assignments: existing.get(overlayId) ?? {},
+    }));
+    return this.commit();
+  }
+
   remove(channel: OutputChannel, overlayId: string): OutputState {
     this.state[channel] = this.state[channel].filter((i) => i.overlayId !== overlayId);
     return this.commit();
