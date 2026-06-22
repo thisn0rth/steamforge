@@ -4,6 +4,7 @@ import {
   ChevronUp,
   Eye,
   EyeOff,
+  Braces,
   Code2,
   Image as ImageIcon,
   Lock,
@@ -23,6 +24,7 @@ const LAYER_ICON: Record<LayerType, typeof Type> = {
   shape: Square,
   image: ImageIcon,
   html: Code2,
+  code: Braces,
   group: Square,
 };
 
@@ -32,6 +34,7 @@ const ADD_MENU: { type: LayerType; label: string }[] = [
   { type: 'shape', label: 'Shape' },
   { type: 'image', label: 'Image' },
   { type: 'html', label: 'HTML / CSS' },
+  { type: 'code', label: 'JSX / Code' },
 ];
 
 export function LayersPanel({
