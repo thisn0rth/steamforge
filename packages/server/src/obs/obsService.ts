@@ -6,6 +6,7 @@ import type {
   ObsStreamStatus,
   ObsRecordStatus,
   ObsStats,
+  OutputChannel,
 } from '@streamforge/shared';
 import { config } from '../config.js';
 
@@ -53,6 +54,9 @@ class ObsService extends EventEmitter {
   private lastPreviewSent: string | null = null;
   private replayBufferActive = false;
   private replaySaving = false;
+  private overlaySourceName = config.obs.overlaySourceName;
+  private overlayAutoSwitch = config.obs.overlayAutoSwitch;
+  private lastOverlayChannel: OutputChannel = 'program';
   private pendingReplayTriggeredBy: string | null = null;
   private replaySaveTimer: NodeJS.Timeout | null = null;
 
@@ -146,6 +150,8 @@ class ObsService extends EventEmitter {
     await this.refreshOutputs();
     this.startPolling();
     this.updateFrameCapture();
+    // Re-apply the shared overlay source URL on (re)connect.
+    void this.setOverlayChannel(this.lastOverlayChannel);
     this.emitState();
   }
 
@@ -431,6 +437,39 @@ class ObsService extends EventEmitter {
     }
   }
 
+  /**
+   * Point the single shared "Overlay" browser source at the given render
+   * channel (`/live` or `/preview`). No-ops when disconnected, auto-switch is
+   * off, or the source doesn't exist — so it's safe to call on every output
+   * change.
+   */
+  async setOverlayChannel(channel: OutputChannel): Promise<void> {
+    this.lastOverlayChannel = channel;
+    if (!this.connected || !this.overlayAutoSwitch) return;
+    const inputName = this.overlaySourceName;
+    if (!inputName) return;
+    const path = channel === 'program' ? '/live' : '/preview';
+    const url = `${config.obs.overlayBaseUrl.replace(/\/$/, '')}${path}`;
+    try {
+      await this.obs.call('SetInputSettings', {
+        inputName,
+        inputSettings: { url },
+        overlay: true,
+      });
+    } catch {
+      // Source missing or not a browser source — ignore.
+    }
+  }
+
+  /** Update the shared overlay source config (from Settings). */
+  setOverlaySource(patch: { name?: string; autoSwitch?: boolean }): void {
+    if (typeof patch.name === 'string') this.overlaySourceName = patch.name.trim();
+    if (typeof patch.autoSwitch === 'boolean') this.overlayAutoSwitch = patch.autoSwitch;
+    // Re-apply so the source reflects the latest config immediately.
+    void this.setOverlayChannel(this.lastOverlayChannel);
+    this.emitState();
+  }
+
   async triggerTransition(): Promise<void> {
     this.assertConnected();
     if (this.studioModeEnabled) {
@@ -482,6 +521,10 @@ class ObsService extends EventEmitter {
       replayBuffer: {
         active: this.replayBufferActive,
         saving: this.replaySaving,
+      },
+      overlaySource: {
+        name: this.overlaySourceName,
+        autoSwitch: this.overlayAutoSwitch,
       },
     };
   }

@@ -79,13 +79,24 @@ to require a shared token.
 2. In StreamForge **Settings**, enter the URL (default `ws://127.0.0.1:4455`) and
    password, then **Connect**.
 3. Add overlay graphics to OBS one of two ways:
-   - **Output sources (recommended):** add a single Browser Source per scene
-     pointed at `http://localhost:4500/live` (program) and, for a multiview/
-     preview scene, `http://localhost:4500/preview`. You then push overlays to
-     Preview and **TAKE** to Live from the Overlays page — the source URL never
-     changes and you don't need a source per overlay.
-   - **Per-overlay source:** use each overlay's **Copy Source URL** button
-     (`http://localhost:4500/overlay/<id>`) to pin one specific overlay.
+   - **Single "Overlay" source (recommended):** add **one** Browser Source named
+     `Overlay` and reuse it in every scene (Add → Browser → existing `Overlay`).
+     Point it at `http://localhost:4500/live` to start. StreamForge then drives
+     its URL automatically over OBS WebSocket: it switches to
+     `http://localhost:4500/preview` while you're staging to Preview and back to
+     `…/live` when you push. You never manage a source per overlay, and the
+     object is the same one in every scene. (Source name is configurable via
+     `STREAMFORGE_OVERLAY_SOURCE`; auto-switching can be turned off with
+     `STREAMFORGE_OVERLAY_AUTOSWITCH=false`.)
+   - **Two fixed sources:** if you prefer to keep Preview and Program visible at
+     the same time (e.g. OBS Studio Mode), add a Browser Source pointed at
+     `…/live` and another at `…/preview` and leave auto-switching off. The
+     per-overlay `http://localhost:4500/overlay/<id>` URLs also still work to pin
+     one specific overlay.
+
+   Either way, focus is chosen **at push time**: pushing an overlay that has data
+   slots to Preview/Live opens a popup to assign the player/team/match for that
+   push, so the same overlay design can target a different focus every time.
 
 ## Rigs
 

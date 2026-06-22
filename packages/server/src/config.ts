@@ -26,6 +26,16 @@ export interface ServerConfig {
     url: string;
     password: string;
     autoConnect: boolean;
+    /**
+     * Name of the single shared browser source in OBS the app drives. Its URL
+     * is flipped between `/preview` and `/live` as overlays are staged/pushed,
+     * so you only need one "Overlay" source per scene.
+     */
+    overlaySourceName: string;
+    /** Whether to auto-switch that source's URL on output changes. */
+    overlayAutoSwitch: boolean;
+    /** Base URL OBS uses to reach the render pages (host-local). */
+    overlayBaseUrl: string;
   };
   /** Firestore league-data integration. Disabled when no credentials given. */
   firestore: {
@@ -72,6 +82,11 @@ export const config: ServerConfig = {
     url: process.env.OBS_WS_URL ?? 'ws://127.0.0.1:4455',
     password: process.env.OBS_WS_PASSWORD ?? '',
     autoConnect: envBool('OBS_AUTO_CONNECT', false),
+    overlaySourceName: process.env.STREAMFORGE_OVERLAY_SOURCE ?? 'Overlay',
+    overlayAutoSwitch: envBool('STREAMFORGE_OVERLAY_AUTOSWITCH', true),
+    overlayBaseUrl:
+      process.env.STREAMFORGE_OVERLAY_BASE_URL ??
+      `http://localhost:${Number(process.env.PORT ?? 4500)}`,
   },
   firestore: {
     serviceAccountJson: process.env.FIRESTORE_SERVICE_ACCOUNT ?? '',

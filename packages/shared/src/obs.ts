@@ -70,4 +70,13 @@ export interface ObsState {
   recording: ObsRecordStatus;
   stats: ObsStats | null;
   replayBuffer: ObsReplayBufferStatus;
+  /** Single shared browser source whose URL the app flips /preview <-> /live. */
+  overlaySource: ObsOverlaySource;
+}
+
+export interface ObsOverlaySource {
+  /** OBS input name to drive (e.g. "Overlay"). */
+  name: string;
+  /** Whether the app auto-switches its URL on output changes. */
+  autoSwitch: boolean;
 }

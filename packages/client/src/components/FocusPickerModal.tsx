@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type {
   GsiPayload,
   LeagueData,
@@ -7,55 +8,77 @@ import type {
   SlotAssignment,
 } from '@streamforge/shared';
 import { orderedPlayers } from '@streamforge/shared';
+import { Modal } from '@/components/Modal';
 import { useStore } from '@/store/useStore';
-import { api } from '@/lib/api';
 
 /**
- * Assigns concrete players/teams/matches to an overlay's data slots ("focus").
- * Changes are saved + broadcast immediately so every operator and the OBS
- * browser source update live.
+ * Asks the operator to assign concrete players/teams/matches to an overlay's
+ * data slots at the moment it's pushed to a channel. Focus is per-push, not
+ * stored on the overlay — every push can target a different focus.
  */
-const EMPTY_ASSIGNMENTS: OverlayAssignments = {};
-
-export function FocusControls({ overlay }: { overlay: Overlay }) {
+export function FocusPickerModal({
+  overlay,
+  channel,
+  onConfirm,
+  onClose,
+}: {
+  overlay: Overlay | null;
+  channel: 'program' | 'preview';
+  onConfirm: (assignments: OverlayAssignments) => void;
+  onClose: () => void;
+}) {
   const gsi = useStore((s) => s.gsi);
   const league = useStore((s) => s.league);
-  // Select the stored reference (may be undefined); defaulting must happen
-  // outside the selector so it doesn't return a fresh object every snapshot
-  // read (which would loop re-renders — React #185).
-  const assignments = useStore((s) => s.assignments[overlay.id]) ?? EMPTY_ASSIGNMENTS;
+  const [assignments, setAssignments] = useState<OverlayAssignments>({});
+
+  // Reset the picked focus whenever a new overlay/channel is opened.
+  const key = overlay ? `${overlay.id}:${channel}` : '';
+  const [lastKey, setLastKey] = useState('');
+  if (key !== lastKey) {
+    setLastKey(key);
+    setAssignments(overlay?.defaultAssignments ?? {});
+  }
+
+  if (!overlay) return null;
   const slots = overlay.slots ?? [];
 
-  if (slots.length === 0) {
-    return (
-      <p className="text-xs text-text-faint">
-        This overlay has no data slots. Add slots in the editor to enable focus selection.
-      </p>
-    );
+  function update(slotId: string, patch: Partial<SlotAssignment>) {
+    setAssignments((prev) => ({ ...prev, [slotId]: { ...prev[slotId], ...patch } }));
   }
 
-  function update(slotId: string, patch: Partial<SlotAssignment>) {
-    const next: OverlayAssignments = {
-      ...assignments,
-      [slotId]: { ...assignments[slotId], ...patch },
-    };
-    useStore.setState((s) => ({ assignments: { ...s.assignments, [overlay.id]: next } }));
-    void api.setAssignments(overlay.id, next).catch(() => undefined);
-  }
+  const verb = channel === 'program' ? 'Live' : 'Preview';
 
   return (
-    <div className="space-y-3">
-      {slots.map((slot) => (
-        <SlotRow
-          key={slot.id}
-          slot={slot}
-          gsi={gsi}
-          league={league}
-          assignment={assignments[slot.id] ?? {}}
-          onChange={(patch) => update(slot.id, patch)}
-        />
-      ))}
-    </div>
+    <Modal
+      open={overlay != null}
+      title={`Push to ${verb} · ${overlay.name}`}
+      onClose={onClose}
+    >
+      <div className="space-y-3">
+        {slots.length === 0 ? (
+          <p className="text-xs text-text-faint">This overlay has no data slots.</p>
+        ) : (
+          slots.map((slot) => (
+            <SlotRow
+              key={slot.id}
+              slot={slot}
+              gsi={gsi}
+              league={league}
+              assignment={assignments[slot.id] ?? {}}
+              onChange={(patch) => update(slot.id, patch)}
+            />
+          ))
+        )}
+        <div className="flex justify-end gap-2 pt-1">
+          <button className="btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn-primary" onClick={() => onConfirm(assignments)}>
+            Push to {verb}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -111,7 +134,7 @@ function SlotRow({
             className="input"
             value={assignment.fsId ?? ''}
             onChange={(e) => onChange({ fsId: e.target.value || undefined })}
-            disabled={!league.connected && leagueDocs(league, slot).length === 0}
+            disabled={leagueDocs(league, slot).length === 0}
           >
             <option value="">— none —</option>
             {leagueDocs(league, slot).map((d) => (

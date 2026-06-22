@@ -34,10 +34,23 @@ export function SettingsPage() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [overlayName, setOverlayName] = useState(obs.overlaySource.name);
+  const [overlaySaved, setOverlaySaved] = useState(false);
 
   useEffect(() => {
     void refreshObs();
   }, [refreshObs]);
+
+  // Keep the editable name in sync when server state arrives.
+  useEffect(() => {
+    setOverlayName(obs.overlaySource.name);
+  }, [obs.overlaySource.name]);
+
+  async function saveOverlaySource(patch: { name?: string; autoSwitch?: boolean }) {
+    await api.obsSetOverlaySource(patch);
+    await refreshObs();
+    setOverlaySaved(true);
+  }
 
   async function connect() {
     setBusy(true);
@@ -175,6 +188,44 @@ export function SettingsPage() {
             Enable the server in OBS under <b>Tools → WebSocket Server Settings</b> (default port
             4455), then paste the password here.
           </p>
+
+          <div className="mt-5 border-t border-ink-600 pt-4">
+            <h3 className="text-sm font-semibold">Overlay output source</h3>
+            <p className="mt-1 text-xs text-text-faint">
+              Add one Browser Source with this name and reuse it in every scene. StreamForge
+              flips its URL between <code>/preview</code> and <code>/live</code> automatically.
+            </p>
+            <div className="mt-3 grid grid-cols-2 items-end gap-3">
+              <div>
+                <label className="label">Source name</label>
+                <input
+                  className="input"
+                  value={overlayName}
+                  onChange={(e) => {
+                    setOverlayName(e.target.value);
+                    setOverlaySaved(false);
+                  }}
+                />
+              </div>
+              <label className="flex h-[38px] items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={obs.overlaySource.autoSwitch}
+                  onChange={(e) => void saveOverlaySource({ autoSwitch: e.target.checked })}
+                />
+                Auto-switch URL on push
+              </label>
+            </div>
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                className="btn-primary"
+                onClick={() => void saveOverlaySource({ name: overlayName })}
+              >
+                Save source name
+              </button>
+              {overlaySaved && <span className="text-xs text-teal">Saved.</span>}
+            </div>
+          </div>
         </section>
 
         {/* CS2 GSI */}
