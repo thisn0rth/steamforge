@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import type {
   GsiPayload,
@@ -7,7 +8,7 @@ import type {
   OverlayAssignments,
   ResolveContext,
 } from '@streamforge/shared';
-import { resolveBindingText } from '@streamforge/shared';
+import { resolveBindingText, resolveTemplate } from '@streamforge/shared';
 import { numAt, strAt } from './evaluate';
 
 /**
@@ -182,7 +183,7 @@ function LayerContent({
   }
 
   if (layer.type === 'html' && layer.html) {
-    return <HtmlLayer html={layer.html.html} css={layer.html.css} title={layer.name} />;
+    return <HtmlLayer html={layer.html.html} css={layer.html.css} ctx={ctx} />;
   }
 
   if (layer.type === 'shape' && layer.shape) {
@@ -207,25 +208,39 @@ function LayerContent({
 }
 
 /**
- * Renders custom HTML/CSS in an isolated iframe so pasted markup and styles
- * can't leak into (or collide with) the rest of the overlay. The document is
- * transparent and non-interactive (overlays are display-only).
+ * Renders custom HTML/CSS inside a Shadow DOM so pasted styles are scoped to
+ * this layer (no leaking/colliding), while `{{ }}` data tokens in the markup
+ * and CSS resolve live from GSI/Firestore. Updating in place (vs. an iframe
+ * reload) keeps bound values flicker-free as data changes. Non-interactive so
+ * the editor can still select the layer underneath.
  */
-function HtmlLayer({ html, css, title }: { html: string; css?: string; title: string }) {
-  const doc = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;width:100%;height:100%;background:transparent;overflow:hidden}</style><style>${css ?? ''}</style></head><body>${html}</body></html>`;
+function HtmlLayer({
+  html,
+  css,
+  ctx,
+}: {
+  html: string;
+  css?: string;
+  ctx: ResolveContext;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const shadowRef = useRef<ShadowRoot | null>(null);
+  const resolvedHtml = resolveTemplate(html, ctx);
+  const resolvedCss = css ? resolveTemplate(css, ctx) : '';
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    if (!shadowRef.current) {
+      shadowRef.current = host.attachShadow({ mode: 'open' });
+    }
+    shadowRef.current.innerHTML = `<style>:host{display:block;width:100%;height:100%;overflow:hidden}${resolvedCss}</style>${resolvedHtml}`;
+  }, [resolvedHtml, resolvedCss]);
+
   return (
-    <iframe
-      title={title}
-      srcDoc={doc}
-      sandbox="allow-scripts"
-      scrolling="no"
-      style={{
-        width: '100%',
-        height: '100%',
-        border: 0,
-        background: 'transparent',
-        pointerEvents: 'none',
-      }}
+    <div
+      ref={hostRef}
+      style={{ width: '100%', height: '100%', pointerEvents: 'none' }}
     />
   );
 }
