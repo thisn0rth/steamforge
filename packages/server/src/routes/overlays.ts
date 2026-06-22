@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import type { Overlay } from '@streamforge/shared';
 import { store } from '../store/store.js';
 import { wsHub } from '../realtime/wsHub.js';
+import { outputStore } from '../output/outputStore.js';
 import { createBlankOverlay } from '../overlays/defaults.js';
 import { userFromRequest } from '../auth/auth.js';
 
@@ -69,5 +70,9 @@ overlaysRouter.delete('/api/overlays/:id', (req, res) => {
     res.status(404).json({ error: 'overlay not found' });
     return;
   }
+  // Drop the deleted overlay from any live/preview output.
+  const validIds = new Set(store.overlays.all().map((o) => o.id));
+  const output = outputStore.prune(validIds);
+  wsHub.broadcast({ type: 'output', output });
   res.status(204).end();
 });

@@ -6,13 +6,14 @@ import type {
   GsiStatus,
   LeagueData,
   ObsState,
+  OutputState,
   OverlayAssignments,
   Replay,
   ReplaySettings,
   Rig,
   SessionUser,
 } from '@streamforge/shared';
-import { EMPTY_LEAGUE_DATA } from '@streamforge/shared';
+import { EMPTY_LEAGUE_DATA, EMPTY_OUTPUT_STATE } from '@streamforge/shared';
 import { api } from '@/lib/api';
 import { RealtimeSocket } from '@/lib/socket';
 import { setSession } from '@/lib/auth';
@@ -36,6 +37,7 @@ interface AppState {
   assets: Asset[];
   league: LeagueData;
   assignments: Record<string, OverlayAssignments>;
+  output: OutputState;
 
   init: () => void;
   refreshRigs: () => Promise<void>;
@@ -78,6 +80,7 @@ export const useStore = create<AppState>((set, get) => ({
   assets: [],
   league: EMPTY_LEAGUE_DATA,
   assignments: {},
+  output: EMPTY_OUTPUT_STATE,
 
   init: () => {
     if (socket) return;
@@ -136,6 +139,9 @@ export const useStore = create<AppState>((set, get) => ({
           case 'assignments':
             set({ assignments: msg.assignments });
             break;
+          case 'output':
+            set({ output: msg.output });
+            break;
           default:
             break;
         }
@@ -156,6 +162,7 @@ export const useStore = create<AppState>((set, get) => ({
     void get().refreshAssets();
     api.league().then((l) => set({ league: l })).catch(() => undefined);
     api.assignments().then((a) => set({ assignments: a })).catch(() => undefined);
+    api.output().then((o) => set({ output: o })).catch(() => undefined);
   },
 
   refreshRigs: async () => {

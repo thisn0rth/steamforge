@@ -15,10 +15,15 @@ import { api } from '@/lib/api';
  * Changes are saved + broadcast immediately so every operator and the OBS
  * browser source update live.
  */
+const EMPTY_ASSIGNMENTS: OverlayAssignments = {};
+
 export function FocusControls({ overlay }: { overlay: Overlay }) {
   const gsi = useStore((s) => s.gsi);
   const league = useStore((s) => s.league);
-  const assignments = useStore((s) => s.assignments[overlay.id] ?? {});
+  // Select the stored reference (may be undefined); defaulting must happen
+  // outside the selector so it doesn't return a fresh object every snapshot
+  // read (which would loop re-renders — React #185).
+  const assignments = useStore((s) => s.assignments[overlay.id]) ?? EMPTY_ASSIGNMENTS;
   const slots = overlay.slots ?? [];
 
   if (slots.length === 0) {
