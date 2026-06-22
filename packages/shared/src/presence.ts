@@ -20,7 +20,8 @@ export type ActivityKind =
   | 'overlayEdited'
   | 'obsConnection'
   | 'replaySaved'
-  | 'assetUploaded';
+  | 'assetUploaded'
+  | 'outputChanged';
 
 export interface ActivityEvent {
   id: string;

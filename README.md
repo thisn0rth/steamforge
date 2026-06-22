@@ -78,8 +78,14 @@ to require a shared token.
 1. In OBS: **Tools → WebSocket Server Settings** → enable, note the port/password.
 2. In StreamForge **Settings**, enter the URL (default `ws://127.0.0.1:4455`) and
    password, then **Connect**.
-3. Add overlays to scenes as **Browser Sources** using the URL from each
-   overlay's **Copy Source URL** button (`http://localhost:4500/overlay/<id>`).
+3. Add overlay graphics to OBS one of two ways:
+   - **Output sources (recommended):** add a single Browser Source per scene
+     pointed at `http://localhost:4500/live` (program) and, for a multiview/
+     preview scene, `http://localhost:4500/preview`. You then push overlays to
+     Preview and **TAKE** to Live from the Overlays page — the source URL never
+     changes and you don't need a source per overlay.
+   - **Per-overlay source:** use each overlay's **Copy Source URL** button
+     (`http://localhost:4500/overlay/<id>`) to pin one specific overlay.
 
 ## Rigs
 

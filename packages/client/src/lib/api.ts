@@ -4,6 +4,8 @@ import type {
   GsiStatus,
   LeagueData,
   ObsState,
+  OutputChannel,
+  OutputState,
   Overlay,
   OverlayAssignments,
   Replay,
@@ -143,6 +145,21 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ assignments }),
     }),
+
+  // Live output (single /live + /preview render endpoints)
+  output: () => http<OutputState>('/api/output'),
+  setOutput: (state: Partial<OutputState>) =>
+    http<OutputState>('/api/output', { method: 'PUT', body: JSON.stringify(state) }),
+  pushOutput: (channel: OutputChannel, overlayId: string, toggle = false) =>
+    http<OutputState>(
+      `/api/output/${channel}/${overlayId}${toggle ? '?toggle=1' : ''}`,
+      { method: 'POST' },
+    ),
+  removeOutput: (channel: OutputChannel, overlayId: string) =>
+    http<OutputState>(`/api/output/${channel}/${overlayId}`, { method: 'DELETE' }),
+  takeOutput: () => http<OutputState>('/api/output/take', { method: 'POST' }),
+  clearOutput: (channel: OutputChannel | 'all' = 'all') =>
+    http<OutputState>(`/api/output/clear?channel=${channel}`, { method: 'POST' }),
 
   // Replays
   replays: () => http<{ replays: Replay[]; settings: ReplaySettings }>('/api/replays'),

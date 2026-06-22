@@ -10,6 +10,7 @@ import { EditorPage } from '@/pages/EditorPage';
 import { TransitionsPage } from '@/pages/TransitionsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { OverlayRenderer } from '@/pages/OverlayRenderer';
+import { OutputRenderer } from '@/pages/OutputRenderer';
 
 const router = createBrowserRouter([
   {
@@ -27,8 +28,11 @@ const router = createBrowserRouter([
       { path: 'settings', element: <SettingsPage /> },
     ],
   },
-  // Standalone, chrome-less route used as an OBS browser source.
+  // Standalone, chrome-less routes used as OBS browser sources.
   { path: '/overlay/:id', element: <OverlayRenderer /> },
+  // One source per channel; the app drives which overlays render here.
+  { path: '/live', element: <OutputRenderer channel="program" /> },
+  { path: '/preview', element: <OutputRenderer channel="preview" /> },
 ]);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

@@ -7,6 +7,7 @@ export * from './rig.js';
 export * from './replay.js';
 export * from './asset.js';
 export * from './league.js';
+export * from './output.js';
 export * from './resolve.js';
 export * from './presence.js';
 export * from './protocol.js';

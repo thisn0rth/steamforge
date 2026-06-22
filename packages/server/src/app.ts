@@ -12,6 +12,7 @@ import { replaysRouter } from './routes/replays.js';
 import { assetsRouter, assetsDir } from './routes/assets.js';
 import { leagueRouter } from './routes/league.js';
 import { assignmentsRouter } from './routes/assignments.js';
+import { outputRouter } from './routes/output.js';
 import { authRouter } from './routes/auth.js';
 import { requireAuth } from './auth/middleware.js';
 import { dataPath } from './config.js';
@@ -44,6 +45,7 @@ export function createApp(): express.Express {
   app.use(assetsRouter);
   app.use(leagueRouter);
   app.use(assignmentsRouter);
+  app.use(outputRouter);
 
   // Saved replay clips are served as static media for the UI and OBS.
   const replaysDir = dataPath('replays');
