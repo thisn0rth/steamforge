@@ -13,6 +13,7 @@ import { numAt } from '@/overlay/evaluate';
 import {
   addLayer,
   createLayer,
+  duplicateLayer,
   moveLayer,
   removeKeyframe,
   removeLayer,
@@ -174,6 +175,11 @@ export function EditorPage() {
             onToggleVisible={(l) => updateLayer({ ...l, visible: !l.visible })}
             onToggleLock={(l) => updateLayer({ ...l, locked: !l.locked })}
             onMove={(lid, dir) => setOverlay(moveLayer(overlay, lid, dir))}
+            onDuplicate={(lid) => {
+              const { overlay: next, newId } = duplicateLayer(overlay, lid);
+              setOverlay(next);
+              if (newId) setSelectedLayerId(newId);
+            }}
             onDelete={(lid) => {
               setOverlay(removeLayer(overlay, lid));
               if (selectedLayerId === lid) setSelectedLayerId(null);
