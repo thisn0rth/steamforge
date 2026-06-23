@@ -167,6 +167,25 @@ export function removeLayer(overlay: Overlay, layerId: string): Overlay {
   return { ...overlay, layers: overlay.layers.filter((l) => l.id !== layerId) };
 }
 
+/**
+ * Deep-clone a layer with a fresh id and a "copy" name, inserted directly above
+ * the original. Returns the new overlay and the new layer's id (for selection).
+ */
+export function duplicateLayer(
+  overlay: Overlay,
+  layerId: string,
+): { overlay: Overlay; newId: string | null } {
+  const idx = overlay.layers.findIndex((l) => l.id === layerId);
+  if (idx < 0) return { overlay, newId: null };
+  const source = overlay.layers[idx];
+  const clone: Layer = structuredClone(source);
+  clone.id = uid('layer');
+  clone.name = `${source.name} copy`;
+  const layers = [...overlay.layers];
+  layers.splice(idx + 1, 0, clone);
+  return { overlay: { ...overlay, layers }, newId: clone.id };
+}
+
 export function moveLayer(overlay: Overlay, layerId: string, dir: -1 | 1): Overlay {
   const idx = overlay.layers.findIndex((l) => l.id === layerId);
   if (idx < 0) return overlay;

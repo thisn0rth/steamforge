@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   ChevronDown,
   ChevronUp,
+  Copy,
   Eye,
   EyeOff,
   Braces,
@@ -45,6 +46,7 @@ export function LayersPanel({
   onToggleVisible,
   onToggleLock,
   onMove,
+  onDuplicate,
   onDelete,
 }: {
   overlay: Overlay;
@@ -54,6 +56,7 @@ export function LayersPanel({
   onToggleVisible: (layer: Layer) => void;
   onToggleLock: (layer: Layer) => void;
   onMove: (id: string, dir: -1 | 1) => void;
+  onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -119,6 +122,9 @@ export function LayersPanel({
                 </IconBtn>
                 <IconBtn title="Down" onClick={() => onMove(layer.id, -1)}>
                   <ChevronDown size={14} />
+                </IconBtn>
+                <IconBtn title="Duplicate" onClick={() => onDuplicate(layer.id)}>
+                  <Copy size={13} />
                 </IconBtn>
                 <IconBtn title="Delete" danger onClick={() => onDelete(layer.id)}>
                   <Trash2 size={13} />
