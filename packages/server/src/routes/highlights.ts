@@ -21,6 +21,10 @@ highlightsRouter.put('/api/highlights/settings', (req, res) => {
   );
 });
 
+highlightsRouter.post('/api/highlights/recheck-ffmpeg', (_req, res) => {
+  res.json({ ffmpegAvailable: highlightService.recheckFfmpeg() });
+});
+
 highlightsRouter.delete('/api/highlights/kills/:id', (req, res) => {
   const ok = highlightService.removeKill(req.params.id);
   res.status(ok ? 204 : 404).end();
