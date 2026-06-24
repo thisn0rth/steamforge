@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import {
   LayoutGrid,
   Layers,
+  Scissors,
   Sparkles,
   Settings,
   Radio,
@@ -16,6 +17,7 @@ import { PresenceBar } from '@/components/PresenceBar';
 const NAV = [
   { to: '/', label: 'Control', icon: LayoutGrid, end: true },
   { to: '/overlays', label: 'Overlays', icon: Layers, end: false },
+  { to: '/highlights', label: 'Highlights', icon: Scissors, end: false },
   { to: '/transitions', label: 'Transitions', icon: Sparkles, end: false },
   { to: '/settings', label: 'Settings', icon: Settings, end: false },
 ];

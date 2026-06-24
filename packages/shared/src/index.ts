@@ -5,6 +5,7 @@ export * from './overlay.js';
 export * from './transition.js';
 export * from './rig.js';
 export * from './replay.js';
+export * from './highlights.js';
 export * from './asset.js';
 export * from './league.js';
 export * from './output.js';

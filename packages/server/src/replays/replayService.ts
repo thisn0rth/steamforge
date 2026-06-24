@@ -89,6 +89,50 @@ class ReplayService extends EventEmitter {
     return true;
   }
 
+  /**
+   * Register an already-rendered file (e.g. an auto-clip montage) into the
+   * replay library. Copies it into the replays dir if it isn't already there.
+   */
+  async addLocalFile(
+    srcPath: string,
+    name: string,
+    triggeredBy: string | null,
+  ): Promise<Replay> {
+    fs.mkdirSync(this.dir, { recursive: true });
+    const id = nanoid(8);
+    const base = path.basename(srcPath);
+    const fileName = base.startsWith(id) ? base : `${id}-${base}`;
+    const dest = path.join(this.dir, fileName);
+    if (path.resolve(srcPath) !== path.resolve(dest)) {
+      fs.copyFileSync(srcPath, dest);
+    }
+    let sizeBytes = 0;
+    try {
+      sizeBytes = fs.statSync(dest).size;
+    } catch {
+      // best effort
+    }
+    const savedAt = Date.now();
+    const replay: Replay = {
+      id,
+      name,
+      url: `/replays/${encodeURIComponent(fileName)}`,
+      fileName,
+      sizeBytes,
+      savedAt,
+      triggeredBy,
+    };
+    this.replays.push(replay);
+    this.prune();
+    this.persist();
+    this.emit('saved', replay);
+    this.emitChange();
+    if (this.settings.autoLoad) {
+      await this.loadIntoPlayer(replay).catch(() => undefined);
+    }
+    return replay;
+  }
+
   private async onReplaySaved(srcPath: string, triggeredBy: string | null): Promise<void> {
     const id = nanoid(8);
     const base = path.basename(srcPath);

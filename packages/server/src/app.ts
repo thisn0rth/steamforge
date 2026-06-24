@@ -9,6 +9,7 @@ import { rigsRouter } from './routes/rigs.js';
 import { overlaysRouter } from './routes/overlays.js';
 import { transitionsRouter } from './routes/transitions.js';
 import { replaysRouter } from './routes/replays.js';
+import { highlightsRouter } from './routes/highlights.js';
 import { assetsRouter, assetsDir } from './routes/assets.js';
 import { leagueRouter } from './routes/league.js';
 import { assignmentsRouter } from './routes/assignments.js';
@@ -42,6 +43,7 @@ export function createApp(): express.Express {
   app.use(overlaysRouter);
   app.use(transitionsRouter);
   app.use(replaysRouter);
+  app.use(highlightsRouter);
   app.use(assetsRouter);
   app.use(leagueRouter);
   app.use(assignmentsRouter);
