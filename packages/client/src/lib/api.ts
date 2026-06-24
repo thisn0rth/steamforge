@@ -187,6 +187,10 @@ export const api = {
 
   // Highlights / auto-clip
   highlights: () => http<HighlightState>('/api/highlights'),
+  recheckFfmpeg: () =>
+    http<{ ffmpegAvailable: boolean }>('/api/highlights/recheck-ffmpeg', {
+      method: 'POST',
+    }),
   updateHighlightSettings: (settings: Partial<HighlightSettings>) =>
     http<HighlightSettings>('/api/highlights/settings', {
       method: 'PUT',

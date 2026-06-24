@@ -29,6 +29,20 @@ export interface KillEvent {
   recordOffsetMs: number | null;
 }
 
+/**
+ * One physical recording file within a session. OBS can roll over to a new file
+ * mid-session (manual/auto split, or our generate-time split), so a session is a
+ * sequence of segments, each covering a contiguous offset range of the session.
+ */
+export interface RecordingSegment {
+  /** Absolute path to the finalized file (null until it's resolved/closed). */
+  filePath: string | null;
+  /** Offset (ms) from session start where this segment begins. */
+  startOffsetMs: number;
+  /** Offset (ms) from session start where it ends, or null while still writing. */
+  endOffsetMs: number | null;
+}
+
 /** A span of OBS recording, used as montage source footage. */
 export interface RecordingSession {
   id: string;
@@ -40,6 +54,8 @@ export interface RecordingSession {
   active: boolean;
   /** Absolute file path OBS reported on stop (null until then). */
   filePath: string | null;
+  /** Recording files making up this session, in order. */
+  segments: RecordingSegment[];
 }
 
 /** Tunables for how kills are turned into clips. */

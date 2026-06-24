@@ -50,6 +50,12 @@ export interface ServerConfig {
     /** Auto-refresh interval in ms (0 disables periodic refresh). */
     refreshMs: number;
   };
+  /**
+   * Explicit path to the ffmpeg binary (and ffprobe alongside it). Empty means
+   * auto-detect: PATH first, then common install locations (e.g. winget on
+   * Windows). Set this if PATH resolution is unreliable.
+   */
+  ffmpegPath: string;
   /** Live monitor preview (screenshot streaming) settings. */
   preview: {
     /** Frames per second to grab for the Program/Preview monitors. */
@@ -102,6 +108,7 @@ export const config: ServerConfig = {
     },
     refreshMs: clamp(Number(process.env.FIRESTORE_REFRESH_MS ?? 60_000), 0, 3_600_000),
   },
+  ffmpegPath: process.env.STREAMFORGE_FFMPEG ?? '',
   preview: {
     fps: clamp(Number(process.env.STREAMFORGE_PREVIEW_FPS ?? 6), 1, 30),
     width: clamp(Number(process.env.STREAMFORGE_PREVIEW_WIDTH ?? 480), 160, 1920),

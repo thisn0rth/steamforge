@@ -8,6 +8,7 @@ import type {
   HighlightSettings,
   HighlightState,
   KillEvent,
+  RecordingSegment,
   RecordingSession,
 } from '@streamforge/shared';
 import { DEFAULT_HIGHLIGHT_SETTINGS } from '@streamforge/shared';
@@ -15,7 +16,13 @@ import { dataPath } from '../config.js';
 import { gsiService } from '../gsi/gsiService.js';
 import { obsService } from '../obs/obsService.js';
 import { replayService } from '../replays/replayService.js';
-import { ffmpegAvailable, renderMontage, type MontageCut } from './montage.js';
+import {
+  ffmpegAvailable,
+  refreshFfmpeg,
+  renderMontage,
+  type MontageCut,
+  type RenderCut,
+} from './montage.js';
 
 const MAX_KILLS = 1000;
 const MAX_RECORDINGS = 25;
@@ -42,6 +49,8 @@ class HighlightService extends EventEmitter {
   private prevStats = new Map<string, PlayerStat>();
   private seeded = false;
   private activeRecordingId: string | null = null;
+  /** Path OBS is currently writing to (the open segment's file). */
+  private activeSegmentPath: string | null = null;
 
   init(): void {
     fs.mkdirSync(this.workDir, { recursive: true });
@@ -49,10 +58,13 @@ class HighlightService extends EventEmitter {
     this.kills = saved.kills ?? [];
     this.recordings = saved.recordings ?? [];
     this.settings = { ...DEFAULT_HIGHLIGHT_SETTINGS, ...(saved.settings ?? {}) };
-    // Any session left "active" from a previous run is stale.
-    this.recordings = this.recordings.map((r) =>
-      r.active ? { ...r, active: false } : r,
-    );
+    // Any session left "active" from a previous run is stale. Also backfill the
+    // segments array for sessions persisted before segment tracking existed.
+    this.recordings = this.recordings.map((r) => ({
+      ...r,
+      active: false,
+      segments: r.segments ?? [],
+    }));
 
     gsiService.on('payload', (payload: GsiPayload) => this.onPayload(payload));
     obsService.on('recordingStarted', (e: { startedAt: number }) =>
@@ -62,6 +74,9 @@ class HighlightService extends EventEmitter {
       'recordingStopped',
       (e: { outputPath: string | null; startedAt: number | null }) =>
         this.onRecordingStopped(e.outputPath),
+    );
+    obsService.on('recordFileChanged', (e: { newPath: string | null }) =>
+      this.onRecordFileChanged(e.newPath),
     );
   }
 
@@ -89,6 +104,13 @@ class HighlightService extends EventEmitter {
     return { ...this.settings };
   }
 
+  /** Re-detect ffmpeg (e.g. after the user installs it) and rebroadcast. */
+  recheckFfmpeg(): boolean {
+    const available = refreshFfmpeg();
+    this.emitChange();
+    return available;
+  }
+
   /** Drop a kill from the feed (e.g. a false positive). */
   removeKill(id: string): boolean {
     const before = this.kills.length;
@@ -114,7 +136,12 @@ class HighlightService extends EventEmitter {
       .sort((a, b) => (a.recordOffsetMs ?? 0) - (b.recordOffsetMs ?? 0));
   }
 
-  /** Render a montage from explicit cuts against a finished recording. */
+  /**
+   * Render a montage from explicit cuts. Works whether or not the recording is
+   * still running: if it's active, OBS is asked to split the recording file
+   * (which finalizes the footage-so-far without interrupting recording), then the
+   * cuts are mapped onto the resulting segment files.
+   */
   async generateMontage(
     recordingId: string,
     cuts: MontageCut[],
@@ -124,22 +151,37 @@ class HighlightService extends EventEmitter {
     if (this.rendering) throw new Error('A montage is already rendering');
     const recording = this.recordings.find((r) => r.id === recordingId);
     if (!recording) throw new Error('Recording not found');
-    if (recording.active || !recording.filePath) {
-      throw new Error(
-        'Stop the OBS recording first — the montage reads the finished file',
-      );
-    }
-    if (!fs.existsSync(recording.filePath)) {
-      throw new Error(`Recording file is missing: ${recording.filePath}`);
-    }
     const usable = cuts.filter((c) => c.outMs > c.inMs);
     if (usable.length === 0) throw new Error('No clips selected');
+
+    // If still recording, finalize the current footage so it's readable.
+    if (recording.active) {
+      await this.finalizeActiveFootage(recording);
+    }
+
+    const segments = this.renderableSegments(recording);
+    if (segments.length === 0) {
+      throw new Error(
+        recording.active
+          ? 'No finalized footage yet — start recording before the kills you want to clip.'
+          : 'Recording file is unavailable.',
+      );
+    }
+
+    // Map each clip (session-relative offsets) onto the segment files.
+    const renderCuts: RenderCut[] = [];
+    for (const c of usable) {
+      renderCuts.push(...mapCutToSegments(segments, c.inMs, c.outMs));
+    }
+    if (renderCuts.length === 0) {
+      throw new Error('Selected clips fall outside the available footage.');
+    }
 
     this.rendering = true;
     this.emitChange();
     const outFile = path.join(this.workDir, `${nanoid(8)}.mp4`);
     try {
-      await renderMontage(recording.filePath, usable, outFile);
+      await renderMontage(renderCuts, outFile);
       const label =
         name?.trim() ||
         `Montage · ${usable.length} clip${usable.length === 1 ? '' : 's'}`;
@@ -149,6 +191,62 @@ class HighlightService extends EventEmitter {
       fs.rm(outFile, { force: true }, () => undefined);
       this.rendering = false;
       this.emitChange();
+    }
+  }
+
+  /**
+   * Finalized, readable segments for a recording, in order. Falls back to the
+   * single `filePath` for sessions recorded before segment tracking existed.
+   */
+  private renderableSegments(recording: RecordingSession): RecordingSegment[] {
+    const closed = recording.segments.filter(
+      (s) => s.filePath && s.endOffsetMs != null,
+    );
+    if (closed.length > 0) return closed;
+    if (recording.filePath) {
+      const end =
+        recording.endedAt && recording.startedAt
+          ? recording.endedAt - recording.startedAt
+          : Number.MAX_SAFE_INTEGER;
+      return [{ filePath: recording.filePath, startOffsetMs: 0, endOffsetMs: end }];
+    }
+    return [];
+  }
+
+  /**
+   * Split the active recording so footage up to now becomes a complete, readable
+   * file (recording continues). Falls back to clipping the in-progress file
+   * directly when OBS can't split (older OBS + a streamable format like mkv).
+   */
+  private async finalizeActiveFootage(recording: RecordingSession): Promise<void> {
+    // Make sure we know the open file before splitting so it can be recorded.
+    if (this.activeSegmentPath == null) {
+      this.resolveOpenSegmentPath(recording.id);
+    }
+    const rolled = new Promise<void>((resolve) => {
+      const done = (): void => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        this.off('segment-rolled', done);
+        resolve();
+      }, 8000);
+      this.once('segment-rolled', done);
+    });
+    try {
+      await obsService.splitRecordFile();
+      await rolled;
+    } catch {
+      // OBS couldn't split: fall back to clipping the open file in place. This
+      // only works if OBS records a streamable format (mkv / fragmented mp4).
+      const file = this.activeSegmentPath ?? obsService.resolveActiveRecordingFile();
+      const open = recording.segments[recording.segments.length - 1];
+      if (file && open && open.endOffsetMs == null) {
+        open.filePath = file;
+        open.endOffsetMs = Date.now() - recording.startedAt;
+        this.persist();
+      }
     }
   }
 
@@ -165,12 +263,56 @@ class HighlightService extends EventEmitter {
       endedAt: null,
       active: true,
       filePath: null,
+      segments: [{ filePath: null, startOffsetMs: 0, endOffsetMs: null }],
     };
     this.recordings.push(session);
     this.activeRecordingId = session.id;
+    this.activeSegmentPath = null;
+    // OBS reports the path only on stop/split; resolve the first file shortly
+    // after it's created so an in-progress montage knows the source footage.
+    setTimeout(() => this.resolveOpenSegmentPath(session.id), 1500);
     this.prune();
     this.persist();
     this.emitChange();
+  }
+
+  /** Fill in the open segment's file path by scanning OBS's record directory. */
+  private resolveOpenSegmentPath(sessionId: string): void {
+    if (this.activeRecordingId !== sessionId) return;
+    if (this.activeSegmentPath) return;
+    const file = obsService.resolveActiveRecordingFile();
+    if (!file) return;
+    this.activeSegmentPath = file;
+    const session = this.recordings.find((r) => r.id === sessionId);
+    const open = session?.segments[session.segments.length - 1];
+    if (open && open.endOffsetMs == null && open.filePath == null) {
+      open.filePath = file;
+      this.persist();
+    }
+  }
+
+  /** OBS rolled to a new file: finalize the open segment and start a new one. */
+  private onRecordFileChanged(newPath: string | null): void {
+    const session = this.recordings.find((r) => r.id === this.activeRecordingId);
+    if (!session) return;
+    if (this.activeSegmentPath == null) {
+      this.activeSegmentPath = obsService.resolveActiveRecordingFile();
+    }
+    const offset = Date.now() - session.startedAt;
+    const open = session.segments[session.segments.length - 1];
+    if (open && open.endOffsetMs == null) {
+      open.endOffsetMs = offset;
+      if (open.filePath == null) open.filePath = this.activeSegmentPath;
+    }
+    session.segments.push({
+      filePath: newPath,
+      startOffsetMs: offset,
+      endOffsetMs: null,
+    });
+    this.activeSegmentPath = newPath;
+    this.persist();
+    this.emitChange();
+    this.emit('segment-rolled');
   }
 
   private onRecordingStopped(outputPath: string | null): void {
@@ -179,8 +321,14 @@ class HighlightService extends EventEmitter {
       session.active = false;
       session.endedAt = Date.now();
       session.filePath = outputPath;
+      const open = session.segments[session.segments.length - 1];
+      if (open && open.endOffsetMs == null) {
+        open.endOffsetMs = Date.now() - session.startedAt;
+        open.filePath = outputPath ?? open.filePath ?? this.activeSegmentPath;
+      }
     }
     this.activeRecordingId = null;
+    this.activeSegmentPath = null;
     this.persist();
     this.emitChange();
   }
@@ -326,6 +474,32 @@ class HighlightService extends EventEmitter {
 function clampMs(n: number): number {
   if (Number.isNaN(n)) return 0;
   return Math.min(60_000, Math.max(0, Math.round(n)));
+}
+
+/**
+ * Map a clip window (session-relative offsets) onto the segment files it spans,
+ * producing per-file cuts. A clip that straddles a split boundary yields one cut
+ * per segment; portions outside any finalized segment are dropped (clamped).
+ */
+function mapCutToSegments(
+  segments: RecordingSegment[],
+  inMs: number,
+  outMs: number,
+): RenderCut[] {
+  const cuts: RenderCut[] = [];
+  for (const seg of segments) {
+    if (!seg.filePath || seg.endOffsetMs == null) continue;
+    const overlapStart = Math.max(inMs, seg.startOffsetMs);
+    const overlapEnd = Math.min(outMs, seg.endOffsetMs);
+    if (overlapEnd > overlapStart) {
+      cuts.push({
+        input: seg.filePath,
+        inMs: overlapStart - seg.startOffsetMs,
+        outMs: overlapEnd - seg.startOffsetMs,
+      });
+    }
+  }
+  return cuts;
 }
 
 function activeWeapon(player: GsiPlayer): string | null {

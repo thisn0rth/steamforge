@@ -1,4 +1,6 @@
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import path from 'node:path';
 import OBSWebSocket from 'obs-websocket-js';
 import type {
   ObsScene,
@@ -56,6 +58,8 @@ class ObsService extends EventEmitter {
   private replaySaving = false;
   /** Epoch ms the current OBS recording started (null when not recording). */
   private recordStartedAt: number | null = null;
+  /** Folder OBS writes recordings to (for resolving in-progress file paths). */
+  private recordDirectory: string | null = null;
   private overlaySourceName = config.obs.overlaySourceName;
   private overlayAutoSwitch = config.obs.overlayAutoSwitch;
   private lastOverlayChannel: OutputChannel = 'program';
@@ -84,6 +88,10 @@ class ObsService extends EventEmitter {
     this.obs.on('RecordStateChanged', ({ outputActive, outputPath }) => {
       this.setRecordingActive(outputActive, outputPath ?? null);
       this.emitState();
+    });
+    // Emitted when OBS rolls over to a new recording file (manual/auto split).
+    this.obs.on('RecordFileChanged', ({ newOutputPath }) => {
+      this.emit('recordFileChanged', { newPath: newOutputPath ?? null });
     });
     this.obs.on('CurrentProgramSceneChanged', ({ sceneName }) => {
       this.currentProgramScene = sceneName;
@@ -151,6 +159,7 @@ class ObsService extends EventEmitter {
     // The control room is a Live/Preview model, which needs OBS Studio Mode.
     await this.ensureStudioMode().catch(() => undefined);
     await this.refreshReplayBuffer();
+    await this.refreshRecordDirectory();
     await this.refreshOutputs();
     this.startPolling();
     this.updateFrameCapture();
@@ -534,6 +543,7 @@ class ObsService extends EventEmitter {
     if (active && !was) {
       this.recordStartedAt = Date.now();
       this.recording.active = true;
+      void this.refreshRecordDirectory();
       this.emit('recordingStarted', { startedAt: this.recordStartedAt });
     } else if (!active && was) {
       this.emit('recordingStopped', {
@@ -553,6 +563,67 @@ class ObsService extends EventEmitter {
 
   isRecording(): boolean {
     return this.recording.active;
+  }
+
+  private async refreshRecordDirectory(): Promise<void> {
+    if (!this.connected) return;
+    try {
+      const { recordDirectory } = await this.obs.call('GetRecordDirectory');
+      this.recordDirectory = recordDirectory ?? null;
+    } catch {
+      // Older OBS or transient failure; leave last known value.
+    }
+  }
+
+  getRecordDirectory(): string | null {
+    return this.recordDirectory;
+  }
+
+  /**
+   * Best-effort resolve of the file OBS is *currently* writing to: the newest
+   * video file in the record directory. Used to clip an in-progress recording
+   * without stopping it (OBS only reports the path on stop).
+   */
+  resolveActiveRecordingFile(): string | null {
+    const dir = this.recordDirectory;
+    if (!dir) return null;
+    const videoExts = new Set(['.mp4', '.mkv', '.mov', '.flv', '.ts', '.m4v']);
+    let newest: { file: string; mtime: number } | null = null;
+    try {
+      for (const name of fs.readdirSync(dir)) {
+        if (!videoExts.has(path.extname(name).toLowerCase())) continue;
+        const full = path.join(dir, name);
+        let mtime = 0;
+        try {
+          mtime = fs.statSync(full).mtimeMs;
+        } catch {
+          continue;
+        }
+        if (!newest || mtime > newest.mtime) newest = { file: full, mtime };
+      }
+    } catch {
+      return null;
+    }
+    return newest?.file ?? null;
+  }
+
+  /**
+   * Roll OBS over to a new recording file *without stopping the recording*. This
+   * finalizes the current file so it becomes a complete, readable clip source.
+   * Requires OBS 30+ (SplitRecordFile request).
+   */
+  async splitRecordFile(): Promise<void> {
+    this.assertConnected();
+    if (!this.recording.active) {
+      throw new Error('Not recording');
+    }
+    try {
+      await this.obs.call('SplitRecordFile');
+    } catch {
+      throw new Error(
+        'OBS could not split the recording file — this needs OBS 30+ (Settings → enable "Automatic File Splitting" is not required, just a recent OBS).',
+      );
+    }
   }
 
   async toggleRecord(): Promise<boolean> {

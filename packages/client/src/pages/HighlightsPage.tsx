@@ -98,10 +98,17 @@ export function HighlightsPage() {
     }
   }
 
+  // Footage is renderable if the recording is still active (we'll split it to
+  // finalize), or it already has at least one finalized file/segment.
+  const hasFootage =
+    !!selected &&
+    (selected.active ||
+      !!selected.filePath ||
+      selected.segments.some((s) => s.filePath && s.endOffsetMs != null));
+
   const canGenerate =
     !!selected &&
-    !selected.active &&
-    !!selected.filePath &&
+    hasFootage &&
     ffmpegAvailable &&
     includedClips.length > 0 &&
     !rendering &&
@@ -380,16 +387,12 @@ function MontageCard({
             </select>
 
             {selected?.active && (
-              <p className="rounded-md border border-live/40 bg-live/10 px-3 py-2 text-xs text-live">
-                Recording in progress — stop it in OBS to render this montage.
+              <p className="rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-text-muted">
+                Recording in progress — no need to stop it. Generating will split the OBS file to
+                grab the footage so far (recording keeps running). Needs OBS 30+.
               </p>
             )}
-            {!ffmpegAvailable && (
-              <p className="rounded-md border border-live/40 bg-live/10 px-3 py-2 text-xs text-live">
-                ffmpeg is not installed on the host. Install it (e.g. <code>winget install ffmpeg</code> or{' '}
-                <code>apt install ffmpeg</code>) to render montages.
-              </p>
-            )}
+            {!ffmpegAvailable && <FfmpegMissing />}
 
             <div className="flex items-center justify-between text-xs text-text-faint">
               <span>
@@ -480,6 +483,42 @@ function MontageCard({
         )}
       </div>
     </section>
+  );
+}
+
+function FfmpegMissing() {
+  const [checking, setChecking] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  async function recheck() {
+    setChecking(true);
+    setNote(null);
+    try {
+      const { ffmpegAvailable } = await api.recheckFfmpeg();
+      if (!ffmpegAvailable) {
+        setNote('Still not found — open a NEW terminal, confirm `ffmpeg -version`, then restart the server.');
+      }
+    } catch {
+      setNote('Re-check failed.');
+    } finally {
+      setChecking(false);
+    }
+  }
+  return (
+    <div className="space-y-2 rounded-md border border-live/40 bg-live/10 px-3 py-2 text-xs text-live">
+      <p>
+        ffmpeg isn't detected on the host. Install it (<code>winget install Gyan.FFmpeg</code> on
+        Windows, <code>apt install ffmpeg</code> on Linux), then re-check. If you just installed it,
+        open a <strong>new</strong> terminal first so PATH refreshes.
+      </p>
+      <button
+        onClick={() => void recheck()}
+        disabled={checking}
+        className="btn-ghost px-2 py-1 text-xs"
+      >
+        {checking ? 'Checking…' : 'Re-check ffmpeg'}
+      </button>
+      {note && <p className="text-text-faint">{note}</p>}
+    </div>
   );
 }
 
