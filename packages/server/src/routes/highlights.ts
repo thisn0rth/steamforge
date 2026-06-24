@@ -10,12 +10,14 @@ highlightsRouter.get('/api/highlights', (_req, res) => {
 });
 
 highlightsRouter.put('/api/highlights/settings', (req, res) => {
-  const { preRollMs, postRollMs, mergeGapMs, autoSaveReplayOnKill } = req.body ?? {};
+  const { preRollMs, postRollMs, mergeGapMs, transitionMs, autoSaveReplayOnKill } =
+    req.body ?? {};
   res.json(
     highlightService.updateSettings({
       preRollMs,
       postRollMs,
       mergeGapMs,
+      transitionMs,
       autoSaveReplayOnKill,
     }),
   );

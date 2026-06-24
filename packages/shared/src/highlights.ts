@@ -64,8 +64,13 @@ export interface HighlightSettings {
   preRollMs: number;
   /** Seconds of footage to keep after each kill. */
   postRollMs: number;
-  /** Kills whose windows are within this gap get merged into one clip. */
+  /**
+   * Consecutive kills by the *same* player within this gap merge into one clip
+   * (so quick multi-kills stack instead of becoming separate clips).
+   */
   mergeGapMs: number;
+  /** Crossfade duration between clips in the montage (ms). 0 = hard cut. */
+  transitionMs: number;
   /**
    * When on, the server also triggers an OBS replay-buffer save on each kill,
    * for instant in-broadcast replays (independent of the montage flow).
@@ -74,9 +79,10 @@ export interface HighlightSettings {
 }
 
 export const DEFAULT_HIGHLIGHT_SETTINGS: HighlightSettings = {
-  preRollMs: 4000,
-  postRollMs: 3000,
-  mergeGapMs: 6000,
+  preRollMs: 1500,
+  postRollMs: 1500,
+  mergeGapMs: 2500,
+  transitionMs: 400,
   autoSaveReplayOnKill: false,
 };
 
@@ -113,53 +119,125 @@ export function multiKillLabel(n: number): string {
   return `${n}K`;
 }
 
+/** Every kill made by one player, clustered so close kills (multi-kills) stack. */
+export interface KillerGroup {
+  killerSteamId: string | null;
+  killerName: string;
+  killerTeam: 'CT' | 'T' | string | null;
+  total: number;
+  /** Kills clustered by proximity; each inner array is a multi-kill burst. */
+  clusters: KillEvent[][];
+  /** Most recent kill timestamp (for ordering). */
+  latestTs: number;
+}
+
 /**
- * Pure helper: turn a recording's kills into an auto clip plan. Each kill gets a
- * [kill - preRoll, kill + postRoll] window; windows closer than `mergeGapMs` are
- * merged so multi-kills become a single clip. Only kills with a record offset
- * (i.e. captured while recording) are considered.
+ * Group all kills by the player who made them, and within each player cluster
+ * kills that happened close together (within `gapMs`) so multi-kills show as a
+ * stacked group. Players are ordered by most-recent activity.
+ */
+export function groupKillsByKiller(
+  kills: KillEvent[],
+  gapMs: number,
+): KillerGroup[] {
+  const byKiller = new Map<string, KillEvent[]>();
+  for (const k of kills) {
+    const key = k.killerSteamId ?? `name:${k.killerName}`;
+    const list = byKiller.get(key);
+    if (list) list.push(k);
+    else byKiller.set(key, [k]);
+  }
+
+  const groups: KillerGroup[] = [];
+  for (const list of byKiller.values()) {
+    const sorted = [...list].sort((a, b) => a.ts - b.ts);
+    const clusters: KillEvent[][] = [];
+    let cur: KillEvent[] = [];
+    let lastTs = -Infinity;
+    for (const k of sorted) {
+      if (cur.length > 0 && k.ts - lastTs <= gapMs) cur.push(k);
+      else {
+        if (cur.length) clusters.push(cur);
+        cur = [k];
+      }
+      lastTs = k.ts;
+    }
+    if (cur.length) clusters.push(cur);
+    const first = sorted[0];
+    groups.push({
+      killerSteamId: first.killerSteamId,
+      killerName: first.killerName,
+      killerTeam: first.killerTeam,
+      total: sorted.length,
+      clusters,
+      latestTs: sorted[sorted.length - 1].ts,
+    });
+  }
+  return groups.sort((a, b) => b.latestTs - a.latestTs);
+}
+
+/**
+ * Pure helper: turn a recording's kills into an auto clip plan. Kills are grouped
+ * per player, and a player's kills whose [kill - preRoll, kill + postRoll] windows
+ * fall within `mergeGapMs` stack into one multi-kill clip — even if another player
+ * traded a kill in between. Each cluster becomes one clip; clips are ordered by
+ * start time. Only kills captured while recording (with a record offset) count.
  */
 export function buildHighlightPlan(
   kills: KillEvent[],
   settings: HighlightSettings,
 ): HighlightClip[] {
-  const clippable = kills
-    .filter((k) => k.recordOffsetMs != null)
-    .sort((a, b) => (a.recordOffsetMs ?? 0) - (b.recordOffsetMs ?? 0));
+  const clippable = kills.filter((k) => k.recordOffsetMs != null);
   if (clippable.length === 0) return [];
 
-  const groups: KillEvent[][] = [];
-  let current: KillEvent[] = [];
-  let lastOut = -Infinity;
+  // Group by killer, then cluster each killer's kills by window proximity.
+  const byKiller = new Map<string, KillEvent[]>();
   for (const k of clippable) {
-    const offset = k.recordOffsetMs ?? 0;
-    const start = offset - settings.preRollMs;
-    if (current.length > 0 && start <= lastOut + settings.mergeGapMs) {
-      current.push(k);
-    } else {
-      if (current.length) groups.push(current);
-      current = [k];
-    }
-    lastOut = offset + settings.postRollMs;
+    const key = k.killerSteamId ?? `name:${k.killerName}`;
+    const list = byKiller.get(key);
+    if (list) list.push(k);
+    else byKiller.set(key, [k]);
   }
-  if (current.length) groups.push(current);
 
-  return groups.map((group) => {
-    const first = group[0].recordOffsetMs ?? 0;
-    const last = group[group.length - 1].recordOffsetMs ?? 0;
-    const inMs = Math.max(0, first - settings.preRollMs);
-    const outMs = last + settings.postRollMs;
-    const killer = group[0].killerName;
-    const multi = multiKillLabel(group.length);
-    const weapon = group[0].weapon ? ` · ${group[0].weapon}` : '';
-    const label = `${killer}${multi ? ` ${multi}` : ''}${weapon}`.trim();
-    return {
-      id: group.map((k) => k.id).join('+'),
-      killIds: group.map((k) => k.id),
-      label,
-      inMs,
-      outMs,
-      included: true,
-    };
-  });
+  const groups: KillEvent[][] = [];
+  for (const list of byKiller.values()) {
+    const sorted = [...list].sort(
+      (a, b) => (a.recordOffsetMs ?? 0) - (b.recordOffsetMs ?? 0),
+    );
+    let current: KillEvent[] = [];
+    let lastOut = -Infinity;
+    for (const k of sorted) {
+      const offset = k.recordOffsetMs ?? 0;
+      const start = offset - settings.preRollMs;
+      if (current.length > 0 && start <= lastOut + settings.mergeGapMs) {
+        current.push(k);
+      } else {
+        if (current.length) groups.push(current);
+        current = [k];
+      }
+      lastOut = offset + settings.postRollMs;
+    }
+    if (current.length) groups.push(current);
+  }
+
+  return groups
+    .map((group) => {
+      const first = group[0].recordOffsetMs ?? 0;
+      const last = group[group.length - 1].recordOffsetMs ?? 0;
+      const inMs = Math.max(0, first - settings.preRollMs);
+      const outMs = last + settings.postRollMs;
+      const killer = group[0].killerName;
+      const multi = multiKillLabel(group.length);
+      const weapon = group[0].weapon ? ` · ${group[0].weapon}` : '';
+      const label = `${killer}${multi ? ` ${multi}` : ''}${weapon}`.trim();
+      return {
+        id: group.map((k) => k.id).join('+'),
+        killIds: group.map((k) => k.id),
+        label,
+        inMs,
+        outMs,
+        included: true,
+      };
+    })
+    .sort((a, b) => a.inMs - b.inMs);
 }
