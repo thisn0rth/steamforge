@@ -4,6 +4,7 @@ import type {
   Asset,
   GsiPayload,
   GsiStatus,
+  HighlightState,
   LeagueData,
   ObsState,
   OutputState,
@@ -13,7 +14,11 @@ import type {
   Rig,
   SessionUser,
 } from '@streamforge/shared';
-import { EMPTY_LEAGUE_DATA, EMPTY_OUTPUT_STATE } from '@streamforge/shared';
+import {
+  DEFAULT_HIGHLIGHT_SETTINGS,
+  EMPTY_LEAGUE_DATA,
+  EMPTY_OUTPUT_STATE,
+} from '@streamforge/shared';
 import { api } from '@/lib/api';
 import { RealtimeSocket } from '@/lib/socket';
 import { setSession } from '@/lib/auth';
@@ -38,6 +43,7 @@ interface AppState {
   league: LeagueData;
   assignments: Record<string, OverlayAssignments>;
   output: OutputState;
+  highlights: HighlightState;
 
   init: () => void;
   refreshRigs: () => Promise<void>;
@@ -82,6 +88,13 @@ export const useStore = create<AppState>((set, get) => ({
   league: EMPTY_LEAGUE_DATA,
   assignments: {},
   output: EMPTY_OUTPUT_STATE,
+  highlights: {
+    kills: [],
+    recordings: [],
+    settings: DEFAULT_HIGHLIGHT_SETTINGS,
+    rendering: false,
+    ffmpegAvailable: false,
+  },
 
   init: () => {
     if (socket) return;
@@ -143,6 +156,9 @@ export const useStore = create<AppState>((set, get) => ({
           case 'output':
             set({ output: msg.output });
             break;
+          case 'highlights':
+            set({ highlights: msg.state });
+            break;
           default:
             break;
         }
@@ -164,6 +180,7 @@ export const useStore = create<AppState>((set, get) => ({
     api.league().then((l) => set({ league: l })).catch(() => undefined);
     api.assignments().then((a) => set({ assignments: a })).catch(() => undefined);
     api.output().then((o) => set({ output: o })).catch(() => undefined);
+    api.highlights().then((h) => set({ highlights: h })).catch(() => undefined);
   },
 
   refreshRigs: async () => {

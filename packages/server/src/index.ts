@@ -5,10 +5,11 @@ import { wsHub } from './realtime/wsHub.js';
 import { gsiService } from './gsi/gsiService.js';
 import { obsService } from './obs/obsService.js';
 import { replayService } from './replays/replayService.js';
+import { highlightService } from './highlights/highlightService.js';
 import { leagueService } from './league/leagueService.js';
 import { outputStore } from './output/outputStore.js';
 import { authEnabled } from './auth/auth.js';
-import type { Replay, ReplaySettings } from '@streamforge/shared';
+import type { HighlightState, Replay, ReplaySettings } from '@streamforge/shared';
 
 const app = createApp();
 const server = http.createServer(app);
@@ -39,6 +40,14 @@ replayService.on('replays', (snapshot: { replays: Replay[]; settings: ReplaySett
 );
 // Seed the live output state so freshly-connected render pages are correct.
 wsHub.broadcast({ type: 'output', output: outputStore.get() });
+
+// Autonomous highlight/auto-clip system: tracks kills from GSI and renders
+// montages from OBS recordings.
+highlightService.init();
+wsHub.broadcast({ type: 'highlights', state: highlightService.snapshot() });
+highlightService.on('highlights', (state: HighlightState) =>
+  wsHub.broadcast({ type: 'highlights', state }),
+);
 
 // League data (Firestore mirror). Inert when no credentials are configured.
 leagueService.init();

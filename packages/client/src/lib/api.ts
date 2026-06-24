@@ -2,6 +2,8 @@ import type {
   Asset,
   GsiPayload,
   GsiStatus,
+  HighlightSettings,
+  HighlightState,
   LeagueData,
   ObsState,
   OutputChannel,
@@ -182,6 +184,30 @@ export const api = {
     http<Replay>(`/api/replays/${id}/load`, { method: 'POST' }),
   deleteReplay: (id: string) =>
     http<void>(`/api/replays/${id}`, { method: 'DELETE' }),
+
+  // Highlights / auto-clip
+  highlights: () => http<HighlightState>('/api/highlights'),
+  updateHighlightSettings: (settings: Partial<HighlightSettings>) =>
+    http<HighlightSettings>('/api/highlights/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+  removeKill: (id: string) =>
+    http<void>(`/api/highlights/kills/${id}`, { method: 'DELETE' }),
+  clearKills: (recordingId?: string) =>
+    http<{ ok: true }>('/api/highlights/kills/clear', {
+      method: 'POST',
+      body: JSON.stringify({ recordingId }),
+    }),
+  generateMontage: (
+    recordingId: string,
+    clips: { inMs: number; outMs: number }[],
+    name?: string,
+  ) =>
+    http<{ replayId: string }>('/api/highlights/montage', {
+      method: 'POST',
+      body: JSON.stringify({ recordingId, clips, name }),
+    }),
 
   // Transitions
   transitions: () => http<Transition[]>('/api/transitions'),

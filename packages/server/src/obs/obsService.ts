@@ -54,6 +54,8 @@ class ObsService extends EventEmitter {
   private lastPreviewSent: string | null = null;
   private replayBufferActive = false;
   private replaySaving = false;
+  /** Epoch ms the current OBS recording started (null when not recording). */
+  private recordStartedAt: number | null = null;
   private overlaySourceName = config.obs.overlaySourceName;
   private overlayAutoSwitch = config.obs.overlayAutoSwitch;
   private lastOverlayChannel: OutputChannel = 'program';
@@ -68,6 +70,7 @@ class ObsService extends EventEmitter {
       this.stopFrameCapture();
       this.streaming = { ...INACTIVE_STREAM };
       this.recording = { ...INACTIVE_RECORD };
+      this.recordStartedAt = null;
       this.stats = null;
       this.replayBufferActive = false;
       this.clearReplayLock();
@@ -78,9 +81,8 @@ class ObsService extends EventEmitter {
       if (!outputActive) this.streaming = { ...INACTIVE_STREAM };
       this.emitState();
     });
-    this.obs.on('RecordStateChanged', ({ outputActive }) => {
-      this.recording.active = outputActive;
-      if (!outputActive) this.recording = { ...INACTIVE_RECORD };
+    this.obs.on('RecordStateChanged', ({ outputActive, outputPath }) => {
+      this.setRecordingActive(outputActive, outputPath ?? null);
       this.emitState();
     });
     this.obs.on('CurrentProgramSceneChanged', ({ sceneName }) => {
@@ -270,8 +272,16 @@ class ObsService extends EventEmitter {
         totalFrames: Number(stream.outputTotalFrames ?? 0),
         congestion: Number(stream.outputCongestion ?? 0),
       };
+      const recordActive = Boolean(record.outputActive);
+      // Detect a recording already in progress on (re)connect so kills are still
+      // timestamped; the stop event carries the file path for clipping.
+      if (recordActive && this.recordStartedAt == null) {
+        this.recordStartedAt = Date.now() - Number(record.outputDuration ?? 0);
+        this.recording.active = true;
+        this.emit('recordingStarted', { startedAt: this.recordStartedAt });
+      }
       this.recording = {
-        active: Boolean(record.outputActive),
+        active: recordActive,
         paused: Boolean(record.outputPaused),
         durationMs: Number(record.outputDuration ?? 0),
       };
@@ -420,6 +430,23 @@ class ObsService extends EventEmitter {
     }
   }
 
+  /**
+   * Best-effort replay save for automated triggers (e.g. on every kill). Unlike
+   * `saveReplay` it never throws — if the buffer is off or a save is already in
+   * flight, it simply skips. Returns whether a save was actually started.
+   */
+  async trySaveReplay(triggeredBy: string | null): Promise<boolean> {
+    if (!this.connected || !this.replayBufferActive || this.replaySaving) {
+      return false;
+    }
+    try {
+      await this.saveReplay(triggeredBy);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private clearReplayLock(): void {
     this.replaySaving = false;
     this.pendingReplayTriggeredBy = null;
@@ -495,6 +522,37 @@ class ObsService extends EventEmitter {
     if (!outputActive) this.streaming = { ...INACTIVE_STREAM };
     this.emitState();
     return outputActive;
+  }
+
+  /**
+   * Transition the recording-active flag, emitting `recordingStarted` /
+   * `recordingStopped` (with the file path) on edges. Safe to call from both the
+   * OBS event and the status poll.
+   */
+  private setRecordingActive(active: boolean, outputPath: string | null): void {
+    const was = this.recording.active;
+    if (active && !was) {
+      this.recordStartedAt = Date.now();
+      this.recording.active = true;
+      this.emit('recordingStarted', { startedAt: this.recordStartedAt });
+    } else if (!active && was) {
+      this.emit('recordingStopped', {
+        outputPath,
+        startedAt: this.recordStartedAt,
+      });
+      this.recordStartedAt = null;
+      this.recording = { ...INACTIVE_RECORD };
+    }
+  }
+
+  /** Current offset into the active recording in ms, or null if not recording. */
+  recordOffsetMs(): number | null {
+    if (!this.recording.active || this.recordStartedAt == null) return null;
+    return Date.now() - this.recordStartedAt;
+  }
+
+  isRecording(): boolean {
+    return this.recording.active;
   }
 
   async toggleRecord(): Promise<boolean> {

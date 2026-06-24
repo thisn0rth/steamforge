@@ -8,6 +8,7 @@ import { ControlSurface } from '@/pages/ControlSurface';
 import { OverlaysPage } from '@/pages/OverlaysPage';
 import { EditorPage } from '@/pages/EditorPage';
 import { TransitionsPage } from '@/pages/TransitionsPage';
+import { HighlightsPage } from '@/pages/HighlightsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { OverlayRenderer } from '@/pages/OverlayRenderer';
 import { OutputRenderer } from '@/pages/OutputRenderer';
@@ -24,6 +25,7 @@ const router = createBrowserRouter([
       { index: true, element: <ControlSurface /> },
       { path: 'overlays', element: <OverlaysPage /> },
       { path: 'editor/:id', element: <EditorPage /> },
+      { path: 'highlights', element: <HighlightsPage /> },
       { path: 'transitions', element: <TransitionsPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
