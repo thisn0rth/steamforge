@@ -15,9 +15,14 @@ import type {
   HighlightClip,
   HighlightSettings,
   KillEvent,
+  KillerGroup,
   RecordingSession,
 } from '@streamforge/shared';
-import { buildHighlightPlan } from '@streamforge/shared';
+import {
+  buildHighlightPlan,
+  groupKillsByKiller,
+  multiKillLabel,
+} from '@streamforge/shared';
 import { useStore } from '@/store/useStore';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
@@ -129,7 +134,7 @@ export function HighlightsPage() {
           />
 
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-            <KillFeed kills={kills} />
+            <KillFeed kills={kills} gapMs={settings.mergeGapMs} />
             <div className="space-y-5">
               <SettingsCard settings={settings} />
               <MontageCard
@@ -222,14 +227,14 @@ function Stat({
   );
 }
 
-function KillFeed({ kills }: { kills: KillEvent[] }) {
-  const ordered = [...kills].sort((a, b) => b.ts - a.ts);
+function KillFeed({ kills, gapMs }: { kills: KillEvent[]; gapMs: number }) {
+  const groups = groupKillsByKiller(kills, gapMs);
   return (
     <section className="panel flex flex-col overflow-hidden">
       <header className="flex items-center justify-between border-b border-ink-600 px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Crosshair size={16} className="text-accent" />
-          Kill feed
+          Kills by player
           <span className="rounded-full bg-ink-700 px-2 py-0.5 text-xs text-text-muted">
             {kills.length}
           </span>
@@ -243,41 +248,75 @@ function KillFeed({ kills }: { kills: KillEvent[] }) {
           </button>
         )}
       </header>
-      {ordered.length === 0 ? (
+      {groups.length === 0 ? (
         <p className="px-4 py-10 text-center text-sm text-text-faint">
           No kills tracked yet. Kills appear here automatically while CS2 GSI is live.
         </p>
       ) : (
-        <ul className="max-h-[32rem] divide-y divide-ink-700 overflow-y-auto">
-          {ordered.map((k) => (
-            <li key={k.id} className="flex items-center gap-3 px-4 py-2 text-sm">
-              <span className="w-10 shrink-0 text-xs text-text-faint">R{k.round}</span>
-              <span className={clsx('shrink-0 font-medium', teamColor(k.killerTeam))}>
-                {k.killerName}
-              </span>
-              <span className="shrink-0 text-xs text-text-faint">
-                {k.headshot ? '⊙' : '✕'} {k.weapon ?? ''}
-              </span>
-              {k.victimName && (
-                <span className={clsx('truncate text-xs', teamColor(k.victimTeam))}>
-                  {k.victimName}
-                </span>
-              )}
-              <span className="ml-auto shrink-0 text-xs tabular-nums text-text-faint">
-                {k.recordOffsetMs != null ? clock(k.recordOffsetMs) : '—'}
-              </span>
-              <button
-                onClick={() => void api.removeKill(k.id).catch(() => undefined)}
-                className="icon-btn shrink-0"
-                title="Remove kill (false positive)"
-              >
-                <X size={14} />
-              </button>
-            </li>
+        <div className="max-h-[32rem] divide-y divide-ink-700 overflow-y-auto">
+          {groups.map((g) => (
+            <KillerSection key={g.killerSteamId ?? g.killerName} group={g} />
           ))}
-        </ul>
+        </div>
       )}
     </section>
+  );
+}
+
+function KillerSection({ group }: { group: KillerGroup }) {
+  return (
+    <div className="px-4 py-3">
+      <div className="mb-2 flex items-center gap-2">
+        <span className={clsx('text-sm font-semibold', teamColor(group.killerTeam))}>
+          {group.killerName}
+        </span>
+        <span className="rounded-full bg-ink-700 px-2 py-0.5 text-xs text-text-muted">
+          {group.total} kill{group.total === 1 ? '' : 's'}
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        {group.clusters.map((cluster) => (
+          <div
+            key={cluster[0].id}
+            className={clsx(
+              'rounded-md',
+              cluster.length > 1 && 'border border-accent/30 bg-accent/5',
+            )}
+          >
+            {cluster.length > 1 && (
+              <div className="flex items-center gap-2 px-2 pt-1.5 text-xs font-medium text-accent">
+                {multiKillLabel(cluster.length)} · {cluster.length} in a row
+              </div>
+            )}
+            <ul className={clsx(cluster.length > 1 && 'px-1 pb-1')}>
+              {cluster.map((k) => (
+                <li key={k.id} className="flex items-center gap-2 px-2 py-1 text-sm">
+                  <span className="w-8 shrink-0 text-xs text-text-faint">R{k.round}</span>
+                  <span className="shrink-0 text-xs text-text-faint">
+                    {k.headshot ? '⊙' : '✕'} {k.weapon ?? ''}
+                  </span>
+                  {k.victimName && (
+                    <span className={clsx('truncate text-xs', teamColor(k.victimTeam))}>
+                      → {k.victimName}
+                    </span>
+                  )}
+                  <span className="ml-auto shrink-0 text-xs tabular-nums text-text-faint">
+                    {k.recordOffsetMs != null ? clock(k.recordOffsetMs) : '—'}
+                  </span>
+                  <button
+                    onClick={() => void api.removeKill(k.id).catch(() => undefined)}
+                    className="icon-btn shrink-0"
+                    title="Remove kill (false positive)"
+                  >
+                    <X size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -288,7 +327,7 @@ function SettingsCard({ settings }: { settings: HighlightSettings }) {
         <Wand2 size={16} className="text-accent" />
         Auto-clip settings
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <NumField
           label="Pre-roll (s)"
           value={settings.preRollMs / 1000}
@@ -304,7 +343,15 @@ function SettingsCard({ settings }: { settings: HighlightSettings }) {
           value={settings.mergeGapMs / 1000}
           onCommit={(v) => void api.updateHighlightSettings({ mergeGapMs: v * 1000 })}
         />
+        <NumField
+          label="Fade (s)"
+          value={settings.transitionMs / 1000}
+          onCommit={(v) => void api.updateHighlightSettings({ transitionMs: v * 1000 })}
+        />
       </div>
+      <p className="mt-2 text-xs text-text-faint">
+        Fade = crossfade duration between clips in the montage (0 = hard cut).
+      </p>
       <label className="mt-3 flex items-center gap-2 text-xs text-text-muted">
         <input
           type="checkbox"

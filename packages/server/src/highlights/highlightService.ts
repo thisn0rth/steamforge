@@ -47,7 +47,6 @@ class HighlightService extends EventEmitter {
   private rendering = false;
 
   private prevStats = new Map<string, PlayerStat>();
-  private seeded = false;
   private activeRecordingId: string | null = null;
   /** Path OBS is currently writing to (the open segment's file). */
   private activeSegmentPath: string | null = null;
@@ -95,6 +94,9 @@ class HighlightService extends EventEmitter {
     if (typeof patch.preRollMs === 'number') next.preRollMs = clampMs(patch.preRollMs);
     if (typeof patch.postRollMs === 'number') next.postRollMs = clampMs(patch.postRollMs);
     if (typeof patch.mergeGapMs === 'number') next.mergeGapMs = clampMs(patch.mergeGapMs);
+    if (typeof patch.transitionMs === 'number') {
+      next.transitionMs = Math.min(2000, Math.max(0, Math.round(patch.transitionMs)));
+    }
     if (typeof patch.autoSaveReplayOnKill === 'boolean') {
       next.autoSaveReplayOnKill = patch.autoSaveReplayOnKill;
     }
@@ -181,7 +183,7 @@ class HighlightService extends EventEmitter {
     this.emitChange();
     const outFile = path.join(this.workDir, `${nanoid(8)}.mp4`);
     try {
-      await renderMontage(renderCuts, outFile);
+      await renderMontage(renderCuts, outFile, this.settings.transitionMs);
       const label =
         name?.trim() ||
         `Montage · ${usable.length} clip${usable.length === 1 ? '' : 's'}`;
@@ -338,85 +340,80 @@ class HighlightService extends EventEmitter {
   private onPayload(payload: GsiPayload): void {
     const all = payload.allplayers;
     if (!all) return;
-    const phase = payload.map?.phase;
     const round = payload.map?.round ?? 0;
+    // Kills are only counted during live play; warmup/intermission are noise but
+    // we still keep baselines current so the first live kill isn't a false jump.
+    const emitting = payload.map?.phase !== 'warmup';
 
-    const entries = Object.entries(all);
-    const current = new Map<string, PlayerStat>();
-    let reset = false;
-    for (const [key, player] of entries) {
-      const id = player.steamid ?? key;
-      const stat: PlayerStat = {
-        kills: player.match_stats?.kills ?? 0,
-        deaths: player.match_stats?.deaths ?? 0,
-        roundHs: player.state?.round_killhs ?? 0,
-      };
-      current.set(id, stat);
-      const prev = this.prevStats.get(id);
-      if (prev && stat.kills < prev.kills) reset = true;
+    // Only consider players who actually report match_stats this tick. CS2 can
+    // omit a player's stats during transitions; treating that as kills=0 was the
+    // main cause of miscounted/phantom kills, so we skip them entirely instead.
+    const present: { id: string; player: GsiPlayer; stat: PlayerStat }[] = [];
+    for (const [key, player] of Object.entries(all)) {
+      if (!player.match_stats) continue;
+      present.push({
+        id: player.steamid ?? key,
+        player,
+        stat: {
+          kills: player.match_stats.kills ?? 0,
+          deaths: player.match_stats.deaths ?? 0,
+          roundHs: player.state?.round_killhs ?? 0,
+        },
+      });
     }
+    if (present.length === 0) return;
 
-    // First payload (or a new match) seeds the baseline without emitting kills.
-    if (!this.seeded || reset) {
-      this.prevStats = current;
-      this.seeded = true;
-      return;
-    }
-
-    // Warmup kills are noise; skip but keep the baseline current.
-    if (phase === 'warmup') {
-      this.prevStats = current;
-      return;
-    }
-
-    // Build a pool of victims (players whose death count rose this tick).
+    // Victim pool: players whose death count rose this tick (known players only).
     const victims: GsiPlayer[] = [];
-    for (const [key, player] of entries) {
-      const id = player.steamid ?? key;
-      const prev = this.prevStats.get(id);
-      if (!prev) continue;
-      const deaths = player.match_stats?.deaths ?? 0;
-      const delta = deaths - prev.deaths;
-      for (let i = 0; i < delta && i < 5; i++) victims.push(player);
+    if (emitting) {
+      for (const { id, player, stat } of present) {
+        const prev = this.prevStats.get(id);
+        if (!prev) continue;
+        const dd = stat.deaths - prev.deaths;
+        for (let i = 0; i < dd && i < 5; i++) victims.push(player);
+      }
     }
 
     const recordOffsetMs = obsService.recordOffsetMs();
     const recordingId = recordOffsetMs != null ? this.activeRecordingId : null;
     let produced = 0;
 
-    for (const [key, player] of entries) {
-      const id = player.steamid ?? key;
+    for (const { id, player, stat } of present) {
       const prev = this.prevStats.get(id);
-      if (!prev) continue;
-      const kills = player.match_stats?.kills ?? 0;
-      const delta = kills - prev.kills;
-      if (delta <= 0 || delta > 5) continue;
-      const hsDelta = Math.max(0, (player.state?.round_killhs ?? 0) - prev.roundHs);
-      const weapon = activeWeapon(player);
-      for (let i = 0; i < delta; i++) {
-        // Don't let a killer be their own victim in the pairing.
-        const victim = popVictim(victims, id);
-        const kill: KillEvent = {
-          id: nanoid(10),
-          ts: Date.now(),
-          round,
-          killerSteamId: player.steamid ?? null,
-          killerName: player.name,
-          killerTeam: player.team ?? null,
-          victimSteamId: victim?.steamid ?? null,
-          victimName: victim?.name ?? null,
-          victimTeam: victim?.team ?? null,
-          weapon,
-          headshot: i < hsDelta,
-          recordingId,
-          recordOffsetMs,
-        };
-        this.kills.push(kill);
-        produced++;
+      // Emit only on a sane positive delta. A first sighting (no prev), a
+      // decrease (reconnect / new match), or an implausible jump (>6 in one
+      // tick, i.e. a baseline reseed) just updates the baseline silently.
+      if (prev && emitting) {
+        const delta = stat.kills - prev.kills;
+        if (delta > 0 && delta <= 6) {
+          const hsDelta = Math.min(
+            delta,
+            Math.max(0, stat.roundHs - prev.roundHs),
+          );
+          const weapon = activeWeapon(player);
+          for (let i = 0; i < delta; i++) {
+            const victim = popVictim(victims, id);
+            this.kills.push({
+              id: nanoid(10),
+              ts: Date.now(),
+              round,
+              killerSteamId: player.steamid ?? null,
+              killerName: player.name,
+              killerTeam: player.team ?? null,
+              victimSteamId: victim?.steamid ?? null,
+              victimName: victim?.name ?? null,
+              victimTeam: victim?.team ?? null,
+              weapon,
+              headshot: i < hsDelta,
+              recordingId,
+              recordOffsetMs,
+            });
+            produced++;
+          }
+        }
       }
+      this.prevStats.set(id, stat);
     }
-
-    this.prevStats = current;
 
     if (produced > 0) {
       if (this.kills.length > MAX_KILLS) {

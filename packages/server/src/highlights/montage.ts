@@ -156,6 +156,87 @@ function ms(n: number): number {
   return Math.max(0, n) / 1000;
 }
 
+/** Hard-cut concat filter: trim each clip and concatenate end-to-end. */
+function buildConcatFilter(
+  cuts: RenderCut[],
+  inputIndex: Map<string, number>,
+  withAudio: boolean,
+): string {
+  const parts: string[] = [];
+  const concatInputs: string[] = [];
+  cuts.forEach((c, i) => {
+    const idx = inputIndex.get(c.input) ?? 0;
+    const start = ms(c.inMs);
+    const end = ms(c.outMs);
+    parts.push(`[${idx}:v]trim=start=${start}:end=${end},setpts=PTS-STARTPTS[v${i}]`);
+    concatInputs.push(`[v${i}]`);
+    if (withAudio) {
+      parts.push(
+        `[${idx}:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${i}]`,
+      );
+      concatInputs.push(`[a${i}]`);
+    }
+  });
+  const n = cuts.length;
+  const concat = withAudio
+    ? `${concatInputs.join('')}concat=n=${n}:v=1:a=1[v][a]`
+    : `${concatInputs.join('')}concat=n=${n}:v=1:a=0[v]`;
+  return `${parts.join(';')};${concat}`;
+}
+
+/**
+ * Crossfade filter: trim each clip, then chain `xfade` (and `acrossfade` for
+ * audio) so clips dissolve into each other. Each transition overlaps `fade`
+ * seconds, so the running total shrinks by `fade` per join.
+ */
+function buildFadeFilter(
+  cuts: RenderCut[],
+  inputIndex: Map<string, number>,
+  durations: number[],
+  fade: number,
+  withAudio: boolean,
+): string {
+  const parts: string[] = [];
+  cuts.forEach((c, i) => {
+    const idx = inputIndex.get(c.input) ?? 0;
+    const start = ms(c.inMs);
+    const end = ms(c.outMs);
+    // Normalize format/timebase so xfade accepts the streams.
+    parts.push(
+      `[${idx}:v]trim=start=${start}:end=${end},setpts=PTS-STARTPTS,format=yuv420p,settb=AVTB[v${i}]`,
+    );
+    if (withAudio) {
+      parts.push(
+        `[${idx}:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${i}]`,
+      );
+    }
+  });
+
+  // Video xfade chain.
+  let vPrev = '[v0]';
+  let acc = durations[0];
+  for (let i = 1; i < cuts.length; i++) {
+    const out = i === cuts.length - 1 ? '[v]' : `[vx${i}]`;
+    const offset = Math.max(0, acc - fade);
+    parts.push(
+      `${vPrev}[v${i}]xfade=transition=fade:duration=${fade}:offset=${offset}${out}`,
+    );
+    acc = acc + durations[i] - fade;
+    vPrev = out;
+  }
+
+  if (withAudio) {
+    let aPrev = '[a0]';
+    for (let i = 1; i < cuts.length; i++) {
+      const out = i === cuts.length - 1 ? '[a]' : `[ax${i}]`;
+      parts.push(`${aPrev}[a${i}]acrossfade=d=${fade}${out}`);
+      aPrev = out;
+    }
+  }
+
+  return parts.join(';');
+}
+
 /**
  * Render a montage by trimming the given cuts out of one or more source files
  * and concatenating them. A single `filter_complex` graph keeps it frame-accurate
@@ -163,7 +244,11 @@ function ms(n: number): number {
  * concat is always valid. Cuts may reference different files (e.g. recording
  * segments after a mid-session file split).
  */
-export function renderMontage(cuts: RenderCut[], output: string): Promise<void> {
+export function renderMontage(
+  cuts: RenderCut[],
+  output: string,
+  transitionMs = 0,
+): Promise<void> {
   const bin = ffmpegBin();
   if (!bin) {
     return Promise.reject(
@@ -190,27 +275,19 @@ export function renderMontage(cuts: RenderCut[], output: string): Promise<void> 
 
   // Audio only if every source has it (concat needs matching stream counts).
   const withAudio = inputs.every((f) => hasAudioStream(f));
-  const parts: string[] = [];
-  const concatInputs: string[] = [];
-  valid.forEach((c, i) => {
-    const idx = inputIndex.get(c.input) ?? 0;
-    const start = ms(c.inMs);
-    const end = ms(c.outMs);
-    parts.push(`[${idx}:v]trim=start=${start}:end=${end},setpts=PTS-STARTPTS[v${i}]`);
-    concatInputs.push(`[v${i}]`);
-    if (withAudio) {
-      parts.push(
-        `[${idx}:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${i}]`,
-      );
-      concatInputs.push(`[a${i}]`);
-    }
-  });
 
-  const n = valid.length;
-  const concat = withAudio
-    ? `${concatInputs.join('')}concat=n=${n}:v=1:a=1[v][a]`
-    : `${concatInputs.join('')}concat=n=${n}:v=1:a=0[v]`;
-  const filter = `${parts.join(';')};${concat}`;
+  // Crossfade duration, clamped so it never exceeds a clip: xfade needs each
+  // adjacent clip to be longer than the transition.
+  const durations = valid.map((c) => ms(c.outMs) - ms(c.inMs));
+  const minDur = Math.min(...durations);
+  const fade =
+    transitionMs > 0 && valid.length > 1
+      ? Math.min(transitionMs / 1000, minDur * 0.5)
+      : 0;
+
+  const filter = fade > 0
+    ? buildFadeFilter(valid, inputIndex, durations, fade, withAudio)
+    : buildConcatFilter(valid, inputIndex, withAudio);
 
   const args = [
     '-y',
