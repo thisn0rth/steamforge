@@ -132,6 +132,89 @@ export function refreshFfmpeg(): boolean {
   return resolvedFfmpeg != null;
 }
 
+/** Container extensions browsers can play directly (no remux needed). */
+const BROWSER_PLAYABLE = new Set(['.mp4', '.m4v', '.webm', '.mov']);
+
+/** Whether a recording file can be streamed straight to an HTML <video>. */
+export function isBrowserPlayable(input: string): boolean {
+  return BROWSER_PLAYABLE.has(path.extname(input).toLowerCase());
+}
+
+/** Probe the duration of a media file in ms, or null if it can't be read. */
+export function probeDurationMs(input: string): number | null {
+  if (!resolved) resolve();
+  const probe = spawnSync(
+    ffprobeBin(),
+    [
+      '-v',
+      'error',
+      '-show_entries',
+      'format=duration',
+      '-of',
+      'csv=p=0',
+      input,
+    ],
+    { encoding: 'utf8' },
+  );
+  if (probe.status !== 0) return null;
+  const secs = Number.parseFloat(probe.stdout.trim());
+  return Number.isFinite(secs) ? Math.round(secs * 1000) : null;
+}
+
+/**
+ * Remux a recording into a faststart MP4 the browser can scrub (used for the
+ * clip-editor preview when OBS records mkv/etc). Tries a stream copy first
+ * (fast, no quality loss); falls back to a re-encode if the codecs aren't
+ * MP4-compatible.
+ */
+export function remuxToMp4(input: string, output: string): Promise<void> {
+  const bin = ffmpegBin();
+  if (!bin) {
+    return Promise.reject(new Error('ffmpeg is not installed on the host'));
+  }
+  const copyArgs = [
+    '-y',
+    '-i',
+    input,
+    '-c',
+    'copy',
+    '-movflags',
+    '+faststart',
+    output,
+  ];
+  const encodeArgs = [
+    '-y',
+    '-i',
+    input,
+    '-c:v',
+    'libx264',
+    '-preset',
+    'veryfast',
+    '-crf',
+    '20',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '160k',
+    '-movflags',
+    '+faststart',
+    output,
+  ];
+  const run = (args: string[]): Promise<void> =>
+    new Promise<void>((resolve, reject) => {
+      const proc = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+      let stderr = '';
+      proc.stderr.on('data', (d: Buffer) => {
+        stderr = (stderr + d.toString()).slice(-4000);
+      });
+      proc.on('error', reject);
+      proc.on('close', (code) =>
+        code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}: ${stderr.trim()}`)),
+      );
+    });
+  return run(copyArgs).catch(() => run(encodeArgs));
+}
+
 /** Whether the source file has at least one audio stream. */
 function hasAudioStream(input: string): boolean {
   const probe = spawnSync(

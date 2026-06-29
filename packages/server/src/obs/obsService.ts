@@ -635,6 +635,24 @@ class ObsService extends EventEmitter {
     return outputActive;
   }
 
+  /** Start recording if not already recording. No-op when already active. */
+  async startRecording(): Promise<void> {
+    this.assertConnected();
+    if (this.recording.active) return;
+    await this.obs.call('StartRecord');
+  }
+
+  /**
+   * Stop recording if active and return the output file path OBS reports. No-op
+   * (returns null) when not recording.
+   */
+  async stopRecording(): Promise<string | null> {
+    this.assertConnected();
+    if (!this.recording.active) return null;
+    const { outputPath } = await this.obs.call('StopRecord');
+    return outputPath ?? null;
+  }
+
   async refresh(): Promise<void> {
     await this.refreshAll();
   }

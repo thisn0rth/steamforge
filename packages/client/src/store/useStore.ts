@@ -44,8 +44,11 @@ interface AppState {
   assignments: Record<string, OverlayAssignments>;
   output: OutputState;
   highlights: HighlightState;
+  /** Set when a per-round recording finalizes, to prompt the clip editor. */
+  roundReady: { recordingId: string; round: number | null; at: number } | null;
 
   init: () => void;
+  clearRoundReady: () => void;
   refreshRigs: () => Promise<void>;
   refreshObs: () => Promise<void>;
   refreshAssets: () => Promise<void>;
@@ -95,6 +98,7 @@ export const useStore = create<AppState>((set, get) => ({
     rendering: false,
     ffmpegAvailable: false,
   },
+  roundReady: null,
 
   init: () => {
     if (socket) return;
@@ -159,6 +163,15 @@ export const useStore = create<AppState>((set, get) => ({
           case 'highlights':
             set({ highlights: msg.state });
             break;
+          case 'roundReplayReady':
+            set({
+              roundReady: {
+                recordingId: msg.recordingId,
+                round: msg.round,
+                at: Date.now(),
+              },
+            });
+            break;
           default:
             break;
         }
@@ -206,6 +219,8 @@ export const useStore = create<AppState>((set, get) => ({
       // ignore
     }
   },
+
+  clearRoundReady: () => set({ roundReady: null }),
 
   setIdentity: (name, color) => {
     setSession({ name, color });

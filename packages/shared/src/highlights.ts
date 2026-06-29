@@ -56,6 +56,10 @@ export interface RecordingSession {
   filePath: string | null;
   /** Recording files making up this session, in order. */
   segments: RecordingSegment[];
+  /** Map round number this session captured (auto-record-rounds), or null. */
+  round: number | null;
+  /** True when started automatically by the per-round recorder. */
+  auto: boolean;
 }
 
 /** Tunables for how kills are turned into clips. */
@@ -72,6 +76,14 @@ export interface HighlightSettings {
   /** Crossfade duration between clips in the montage (ms). 0 = hard cut. */
   transitionMs: number;
   /**
+   * When on, the server drives OBS to start recording at each round start and
+   * stop shortly after the round ends, so every round becomes its own clip-ready
+   * file. A "replay ready" prompt opens the clip editor when the file finalizes.
+   */
+  autoRecordRounds: boolean;
+  /** Extra footage (ms) to keep recording after a round ends before stopping. */
+  roundPostRollMs: number;
+  /**
    * When on, the server also triggers an OBS replay-buffer save on each kill,
    * for instant in-broadcast replays (independent of the montage flow).
    */
@@ -83,6 +95,8 @@ export const DEFAULT_HIGHLIGHT_SETTINGS: HighlightSettings = {
   postRollMs: 1500,
   mergeGapMs: 2500,
   transitionMs: 400,
+  autoRecordRounds: false,
+  roundPostRollMs: 5000,
   autoSaveReplayOnKill: false,
 };
 

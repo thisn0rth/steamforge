@@ -48,6 +48,11 @@ wsHub.broadcast({ type: 'highlights', state: highlightService.snapshot() });
 highlightService.on('highlights', (state: HighlightState) =>
   wsHub.broadcast({ type: 'highlights', state }),
 );
+highlightService.on(
+  'roundReady',
+  (e: { recordingId: string; round: number | null }) =>
+    wsHub.broadcast({ type: 'roundReplayReady', recordingId: e.recordingId, round: e.round }),
+);
 
 // League data (Firestore mirror). Inert when no credentials are configured.
 leagueService.init();
