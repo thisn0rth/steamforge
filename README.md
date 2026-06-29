@@ -78,8 +78,25 @@ to require a shared token.
 1. In OBS: **Tools → WebSocket Server Settings** → enable, note the port/password.
 2. In StreamForge **Settings**, enter the URL (default `ws://127.0.0.1:4455`) and
    password, then **Connect**.
-3. Add overlays to scenes as **Browser Sources** using the URL from each
-   overlay's **Copy Source URL** button (`http://localhost:4500/overlay/<id>`).
+3. Add overlay graphics to OBS one of two ways:
+   - **Single "Overlay" source (recommended):** add **one** Browser Source named
+     `Overlay` and reuse it in every scene (Add → Browser → existing `Overlay`).
+     Point it at `http://localhost:4500/live` to start. StreamForge then drives
+     its URL automatically over OBS WebSocket: it switches to
+     `http://localhost:4500/preview` while you're staging to Preview and back to
+     `…/live` when you push. You never manage a source per overlay, and the
+     object is the same one in every scene. (Source name is configurable via
+     `STREAMFORGE_OVERLAY_SOURCE`; auto-switching can be turned off with
+     `STREAMFORGE_OVERLAY_AUTOSWITCH=false`.)
+   - **Two fixed sources:** if you prefer to keep Preview and Program visible at
+     the same time (e.g. OBS Studio Mode), add a Browser Source pointed at
+     `…/live` and another at `…/preview` and leave auto-switching off. The
+     per-overlay `http://localhost:4500/overlay/<id>` URLs also still work to pin
+     one specific overlay.
+
+   Either way, focus is chosen **at push time**: pushing an overlay that has data
+   slots to Preview/Live opens a popup to assign the player/team/match for that
+   push, so the same overlay design can target a different focus every time.
 
 ## Rigs
 
@@ -92,6 +109,29 @@ A rig captures a complete production state:
 Activating a rig applies the transition, enforces visibility, then switches the
 program scene — atomically from the operator's point of view.
 
+## Instant replays
+
+StreamForge drives OBS's **replay buffer** so any operator (local or remote) can
+clip the last few seconds of program and have it land on the server for everyone.
+
+1. In OBS, enable the replay buffer once: **Settings → Output → Replay Buffer**
+   (set a max replay length). StreamForge can start/stop it from the **Instant
+   Replay** panel on the Broadcast Control page.
+2. Trigger a save any of these ways — they all go through the same server flow:
+   - the **Save Replay** button in the Instant Replay panel,
+   - the in-app **`R`** shortcut (when the control page is focused),
+   - OBS's own **Save Replay Buffer** hotkey (**Settings → Hotkeys**). This is a
+     true OS-global hotkey that fires no matter what window is focused — the
+     recommended way for the person at the production host.
+3. Overlapping saves are rejected server-side, so two operators can't clip at the
+   same instant. Each saved clip is copied into `data/replays/`, added to the
+   shared replay list, and announced in the activity feed.
+
+**Replay scenes:** pick any OBS **media source** as the *replay player* in the
+Instant Replay panel. With **auto-load** on, each new clip is pushed into that
+source and restarted, so a scene built around it becomes an instant-replay scene
+you can TAKE to. You can also re-load any older clip into the player on demand.
+
 ## Overlay editor
 
 - **Layers**: text, GSI-bound text, shapes, images.
@@ -100,6 +140,69 @@ program scene — atomically from the operator's point of view.
   property) for After Effects-style animation.
 - **GSI bindings**: bind a text layer to a live data path such as
   `map.team_ct.score`, `player.state.health`, or `bomb.state`.
+
+## Multi-operator / remote teams
+
+StreamForge is built for a whole team to drive one production together. The
+server is the single source of truth (it talks to OBS and CS2); everyone else
+connects a browser to it and sees live updates over the WebSocket.
+
+**Identity & presence.** Each operator sets a display name and color (Settings →
+*Your identity*, or at the sign-in screen). The sidebar shows who's online, and
+the Control Surface has a live **activity feed** — "Alex went live with Main
+Camera", "Sam edited Scoreboard" — so the whole crew can see what's happening.
+
+**Auth.** Set a shared team password to gate remote access:
+
+```bash
+STREAMFORGE_TEAM_PASSWORD=your-team-password
+```
+
+- The **production host** (the machine running the server, OBS, and CS2) is
+  trusted automatically — loopback clients and OBS browser sources never see a
+  login prompt.
+- **Remote operators** hit a sign-in screen, enter the shared password plus a
+  display name/color, and get a session token that authorizes the API and the
+  live socket.
+- Leave `STREAMFORGE_TEAM_PASSWORD` empty for purely local use (no auth).
+
+**One command (recommended): `npm run share`.** On the production host, run:
+
+```bash
+STREAMFORGE_TEAM_PASSWORD=your-team-password npm run share
+```
+
+This builds the app, starts the server bound to all interfaces, opens a
+Cloudflare quick tunnel, and prints a public `https://<random>.trycloudflare.com`
+URL to share with the team — they open it from any network, enter the team
+password + a display name, and they're in. Press Ctrl+C to tear it all down.
+
+Requirements: [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+must be installed (`brew install cloudflared` / `winget install --id Cloudflare.cloudflared`).
+The command refuses to start unless `STREAMFORGE_TEAM_PASSWORD` is set, so the
+production is never exposed without auth.
+
+**Manual alternatives.** Bind to the network yourself and put it behind a tunnel:
+
+```bash
+HOST=0.0.0.0 STREAMFORGE_TEAM_PASSWORD=your-team-password npm start
+```
+
+- **Cloudflare Tunnel** (public HTTPS URL, no port forwarding):
+
+  ```bash
+  cloudflared tunnel --url http://localhost:4500
+  ```
+
+  Share the generated `https://<random>.trycloudflare.com` URL with the team.
+  For a stable URL + SSO in front, use a named tunnel with Cloudflare Access.
+
+- **Tailscale** (private mesh VPN, best for a fixed crew): install Tailscale on
+  the host and each operator's machine, then reach the host at
+  `http://<host-tailscale-ip>:4500`.
+
+Always keep `STREAMFORGE_TEAM_PASSWORD` set whenever the server is reachable
+beyond localhost.
 
 ## Configuration
 
@@ -112,6 +215,7 @@ See `.env.example`. All values are optional.
 | `npm run dev`      | Run server + client + shared watch concurrently    |
 | `npm run build`    | Build all workspaces                               |
 | `npm start`        | Build, then serve the built client from the server |
+| `npm run share`    | Build + serve + open a Cloudflare tunnel to share  |
 | `npm run typecheck`| Type-check every workspace                          |
 | `npm run lint`     | Lint with ESLint                                    |
 

@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: theme('colors.ink.900');
+  color: theme('colors.text.DEFAULT');
+  font-family: theme('fontFamily.sans');
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Thin, theme-matched scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: theme('colors.ink.600') transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: theme('colors.ink.600');
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: theme('colors.ink.500');
+  background-clip: content-box;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-xl border border-ink-600 bg-ink-800 shadow-panel;
+  }
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-ink-900 hover:bg-accent-soft;
+  }
+  .btn-ghost {
+    @apply btn border border-ink-600 bg-ink-700/60 text-text hover:bg-ink-600;
+  }
+  .btn-danger {
+    @apply btn bg-live text-white hover:bg-live/80;
+  }
+  .input {
+    @apply w-full rounded-lg border border-ink-600 bg-ink-850 px-3 py-2 text-sm text-text outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/30;
+  }
+  .label {
+    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-text-faint;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-ink-600 bg-ink-750 px-2.5 py-1 text-xs font-medium text-text-muted;
+  }
+  .icon-btn {
+    @apply flex h-7 w-7 items-center justify-center rounded-md border border-ink-600 bg-ink-750 text-text-faint transition hover:text-text disabled:cursor-not-allowed disabled:opacity-40;
+  }
+}
+
+/* Subtle animated glow used on the brand mark / live badges. */
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 59, 70, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(255, 59, 70, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 59, 70, 0);
+  }
+}
+.pulse-ring {
+  animation: pulse-ring 2s infinite;
+}

@@ -9,5 +9,5 @@ coverage/
 *.tsbuildinfo
 
 # StreamForge runtime data (user-generated rigs/overlays live here by default)
-data/
+data/*
 !data/.gitkeep
