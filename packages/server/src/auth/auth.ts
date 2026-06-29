@@ -82,7 +82,11 @@ export function hostUser(name?: unknown, color?: unknown): SessionUser {
  * loopback clients are trusted as the host (optionally named via headers).
  */
 export function userFromRequest(req: Request): SessionUser | null {
-  const tokenUser = userForToken(bearerToken(req));
+  // Bearer header wins; fall back to a `?token=` query param so plain media
+  // elements (e.g. <video src>) that can't set headers can still authenticate.
+  const queryToken =
+    typeof req.query?.token === 'string' ? (req.query.token as string) : undefined;
+  const tokenUser = userForToken(bearerToken(req) ?? queryToken);
   if (tokenUser) return tokenUser;
   if (isLoopback(req) || !authEnabled()) {
     return hostUser(req.headers['x-sf-name'], req.headers['x-sf-color']);

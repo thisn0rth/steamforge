@@ -18,7 +18,9 @@ import { obsService } from '../obs/obsService.js';
 import { replayService } from '../replays/replayService.js';
 import {
   ffmpegAvailable,
+  isBrowserPlayable,
   refreshFfmpeg,
+  remuxToMp4,
   renderMontage,
   type MontageCut,
   type RenderCut,
@@ -51,6 +53,19 @@ class HighlightService extends EventEmitter {
   /** Path OBS is currently writing to (the open segment's file). */
   private activeSegmentPath: string | null = null;
 
+  // ---- per-round auto recording ----
+  /** Last seen GSI round phase, to detect transitions. */
+  private prevRoundPhase: string | null = null;
+  /** Pending stop after a round ends (canceled if a new round starts first). */
+  private roundStopTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Round number + auto flag to stamp onto the next session OBS reports. */
+  private pendingRound: number | null = null;
+  private pendingAuto = false;
+  /** True while an auto round recording is in flight (so we auto-stop it). */
+  private autoRoundActive = false;
+  /** Cache of remuxed, browser-playable preview files keyed by recording id. */
+  private previewCache = new Map<string, { src: string; mtimeMs: number; out: string }>();
+
   init(): void {
     fs.mkdirSync(this.workDir, { recursive: true });
     const saved = this.readState();
@@ -63,6 +78,8 @@ class HighlightService extends EventEmitter {
       ...r,
       active: false,
       segments: r.segments ?? [],
+      round: r.round ?? null,
+      auto: r.auto ?? false,
     }));
 
     gsiService.on('payload', (payload: GsiPayload) => this.onPayload(payload));
@@ -96,6 +113,12 @@ class HighlightService extends EventEmitter {
     if (typeof patch.mergeGapMs === 'number') next.mergeGapMs = clampMs(patch.mergeGapMs);
     if (typeof patch.transitionMs === 'number') {
       next.transitionMs = Math.min(2000, Math.max(0, Math.round(patch.transitionMs)));
+    }
+    if (typeof patch.autoRecordRounds === 'boolean') {
+      next.autoRecordRounds = patch.autoRecordRounds;
+    }
+    if (typeof patch.roundPostRollMs === 'number') {
+      next.roundPostRollMs = Math.min(30_000, Math.max(0, Math.round(patch.roundPostRollMs)));
     }
     if (typeof patch.autoSaveReplayOnKill === 'boolean') {
       next.autoSaveReplayOnKill = patch.autoSaveReplayOnKill;
@@ -197,6 +220,38 @@ class HighlightService extends EventEmitter {
   }
 
   /**
+   * Resolve a browser-playable preview file for a recording's footage. Returns
+   * the source file directly when it's already an MP4/WebM, otherwise remuxes it
+   * to a cached faststart MP4 (so the clip editor can scrub mkv recordings).
+   */
+  async previewVideo(
+    recordingId: string,
+  ): Promise<{ path: string; contentType: string } | null> {
+    const recording = this.recordings.find((r) => r.id === recordingId);
+    if (!recording) return null;
+    const src =
+      recording.filePath ??
+      this.renderableSegments(recording).find((s) => s.filePath)?.filePath ??
+      null;
+    if (!src || !fs.existsSync(src)) return null;
+
+    if (isBrowserPlayable(src)) {
+      return { path: src, contentType: contentTypeFor(src) };
+    }
+
+    // Remux non-MP4 (e.g. mkv) into a cached preview, keyed by source mtime.
+    const mtimeMs = fs.statSync(src).mtimeMs;
+    const cached = this.previewCache.get(recordingId);
+    if (cached && cached.src === src && cached.mtimeMs === mtimeMs && fs.existsSync(cached.out)) {
+      return { path: cached.out, contentType: 'video/mp4' };
+    }
+    const out = path.join(this.workDir, `preview-${recordingId}.mp4`);
+    await remuxToMp4(src, out);
+    this.previewCache.set(recordingId, { src, mtimeMs, out });
+    return { path: out, contentType: 'video/mp4' };
+  }
+
+  /**
    * Finalized, readable segments for a recording, in order. Falls back to the
    * single `filePath` for sessions recorded before segment tracking existed.
    */
@@ -259,6 +314,11 @@ class HighlightService extends EventEmitter {
     this.recordings = this.recordings.map((r) =>
       r.active ? { ...r, active: false, endedAt: r.endedAt ?? Date.now() } : r,
     );
+    const auto = this.pendingAuto;
+    const round = this.pendingRound;
+    this.pendingAuto = false;
+    this.pendingRound = null;
+    this.autoRoundActive = auto;
     const session: RecordingSession = {
       id: nanoid(8),
       startedAt,
@@ -266,6 +326,8 @@ class HighlightService extends EventEmitter {
       active: true,
       filePath: null,
       segments: [{ filePath: null, startOffsetMs: 0, endOffsetMs: null }],
+      round,
+      auto,
     };
     this.recordings.push(session);
     this.activeRecordingId = session.id;
@@ -331,13 +393,87 @@ class HighlightService extends EventEmitter {
     }
     this.activeRecordingId = null;
     this.activeSegmentPath = null;
+    this.autoRoundActive = false;
     this.persist();
     this.emitChange();
+    // Auto round recording finalized → prompt operators to open the clip editor.
+    if (session?.auto) {
+      this.emit('roundReady', {
+        recordingId: session.id,
+        round: session.round ?? null,
+      });
+    }
+  }
+
+  // ---- per-round auto recording -------------------------------------------
+
+  /**
+   * Drive OBS recording from GSI round phases: start at round start (freezetime,
+   * so the whole round is captured even with OBS's ~1s startup), and stop a few
+   * seconds after the round ends. Each round becomes its own clip-ready file.
+   */
+  private maybeAutoRecord(payload: GsiPayload): void {
+    const phase = payload.round?.phase ?? null;
+    if (!this.settings.autoRecordRounds) {
+      this.prevRoundPhase = phase;
+      return;
+    }
+    const mapPhase = payload.map?.phase;
+    const round = payload.map?.round ?? 0;
+    const prev = this.prevRoundPhase;
+    if (phase === prev) return;
+    this.prevRoundPhase = phase;
+
+    // Round begins (buy time, or live if we joined mid-round). Skip warmup.
+    const roundStarting =
+      phase === 'freezetime' || (phase === 'live' && prev !== 'freezetime');
+    if (roundStarting && mapPhase !== 'warmup') {
+      this.cancelRoundStop();
+      void this.startRoundRecording(round);
+      return;
+    }
+    // Round ends: stop after a short buffer so the final kill is captured.
+    if (phase === 'over' && this.autoRoundActive) {
+      this.scheduleRoundStop();
+    }
+  }
+
+  private async startRoundRecording(round: number): Promise<void> {
+    try {
+      // Finalize a still-open previous round first (its stop buffer may not have
+      // fired yet, or rounds came back-to-back) so each round is its own file.
+      if (obsService.isRecording()) {
+        await obsService.stopRecording();
+      }
+      this.pendingRound = round;
+      this.pendingAuto = true;
+      await obsService.startRecording();
+    } catch {
+      // OBS not connected / refused — leave recording off, nothing to clip.
+      this.pendingRound = null;
+      this.pendingAuto = false;
+    }
+  }
+
+  private scheduleRoundStop(): void {
+    this.cancelRoundStop();
+    this.roundStopTimer = setTimeout(() => {
+      this.roundStopTimer = null;
+      void obsService.stopRecording().catch(() => undefined);
+    }, this.settings.roundPostRollMs);
+  }
+
+  private cancelRoundStop(): void {
+    if (this.roundStopTimer) {
+      clearTimeout(this.roundStopTimer);
+      this.roundStopTimer = null;
+    }
   }
 
   // ---- kill detection -----------------------------------------------------
 
   private onPayload(payload: GsiPayload): void {
+    this.maybeAutoRecord(payload);
     const all = payload.allplayers;
     if (!all) return;
     const round = payload.map?.round ?? 0;
@@ -471,6 +607,19 @@ class HighlightService extends EventEmitter {
 function clampMs(n: number): number {
   if (Number.isNaN(n)) return 0;
   return Math.min(60_000, Math.max(0, Math.round(n)));
+}
+
+function contentTypeFor(file: string): string {
+  switch (path.extname(file).toLowerCase()) {
+    case '.webm':
+      return 'video/webm';
+    case '.mov':
+      return 'video/quicktime';
+    case '.m4v':
+      return 'video/x-m4v';
+    default:
+      return 'video/mp4';
+  }
 }
 
 /**

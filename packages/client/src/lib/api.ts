@@ -203,6 +203,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ recordingId }),
     }),
+  /** URL for a recording's footage, for the clip-editor <video> (auth via query). */
+  recordingVideoUrl: (recordingId: string) => {
+    const token = getToken();
+    const q = token ? `?token=${encodeURIComponent(token)}` : '';
+    return `/api/highlights/recordings/${recordingId}/video${q}`;
+  },
   generateMontage: (
     recordingId: string,
     clips: { inMs: number; outMs: number }[],

@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import {
   Circle,
   CircleDot,
+  Clapperboard,
   Crosshair,
   Film,
   RotateCcw,
@@ -26,6 +27,7 @@ import {
 import { useStore } from '@/store/useStore';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/PageHeader';
+import { ClipEditorModal } from '@/components/ClipEditorModal';
 
 interface ClipOverride {
   inMs?: number;
@@ -37,9 +39,12 @@ export function HighlightsPage() {
   const highlights = useStore((s) => s.highlights);
   const obs = useStore((s) => s.obs);
   const gsiStatus = useStore((s) => s.gsiStatus);
+  const roundReady = useStore((s) => s.roundReady);
+  const clearRoundReady = useStore((s) => s.clearRoundReady);
   const { kills, recordings, settings, rendering, ffmpegAvailable } = highlights;
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editorId, setEditorId] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<Record<string, ClipOverride>>({});
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +57,17 @@ export function HighlightsPage() {
   }, [recordings, selectedId]);
 
   const selected = recordings.find((r) => r.id === selectedId) ?? null;
+  const editorRecording = recordings.find((r) => r.id === editorId) ?? null;
+  const editorKills = useMemo(
+    () => (editorId ? kills.filter((k) => k.recordingId === editorId) : []),
+    [kills, editorId],
+  );
+
+  function openEditor(id: string) {
+    setSelectedId(id);
+    setEditorId(id);
+    clearRoundReady();
+  }
 
   const recordingKills = useMemo(
     () =>
@@ -125,6 +141,13 @@ export function HighlightsPage() {
         title="Highlights"
         subtitle="Auto-tracked kills, auto-clipped into montages you can fine-tune."
       />
+      {roundReady && (
+        <ReplayReadyBanner
+          round={roundReady.round}
+          onOpen={() => openEditor(roundReady.recordingId)}
+          onDismiss={clearRoundReady}
+        />
+      )}
       <div className="flex-1 overflow-y-auto">
         <div className="space-y-5 p-8">
           <StatusStrip
@@ -146,6 +169,7 @@ export function HighlightsPage() {
                 killCount={recordingKills.length}
                 onPatchClip={patchClip}
                 onResetEdits={() => setOverrides({})}
+                onOpenEditor={() => selected && openEditor(selected.id)}
                 name={name}
                 onName={setName}
                 onGenerate={() => void generate()}
@@ -157,6 +181,47 @@ export function HighlightsPage() {
             </div>
           </div>
         </div>
+      </div>
+      {editorRecording && (
+        <ClipEditorModal
+          recording={editorRecording}
+          kills={editorKills}
+          settings={settings}
+          onClose={() => setEditorId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ReplayReadyBanner({
+  round,
+  onOpen,
+  onDismiss,
+}: {
+  round: number | null;
+  onOpen: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 border-b border-accent/40 bg-accent/15 px-6 py-3">
+      <Clapperboard size={18} className="text-accent" />
+      <span className="text-sm font-medium">
+        {round != null ? `Round ${round}` : 'Round'} replay ready
+      </span>
+      <span className="text-xs text-text-muted">
+        the recording finalized — open the clip editor to trim and export.
+      </span>
+      <div className="ml-auto flex items-center gap-2">
+        <button
+          onClick={onOpen}
+          className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-ink-900 hover:brightness-110"
+        >
+          Open clip editor
+        </button>
+        <button onClick={onDismiss} className="icon-btn" title="Dismiss">
+          <X size={16} />
+        </button>
       </div>
     </div>
   );
@@ -355,6 +420,17 @@ function SettingsCard({ settings }: { settings: HighlightSettings }) {
       <label className="mt-3 flex items-center gap-2 text-xs text-text-muted">
         <input
           type="checkbox"
+          checked={settings.autoRecordRounds}
+          onChange={(e) =>
+            void api.updateHighlightSettings({ autoRecordRounds: e.target.checked })
+          }
+        />
+        Auto-record each round (start at round start, stop after it ends — prompts the clip
+        editor when ready)
+      </label>
+      <label className="mt-2 flex items-center gap-2 text-xs text-text-muted">
+        <input
+          type="checkbox"
           checked={settings.autoSaveReplayOnKill}
           onChange={(e) =>
             void api.updateHighlightSettings({ autoSaveReplayOnKill: e.target.checked })
@@ -375,6 +451,7 @@ function MontageCard({
   killCount,
   onPatchClip,
   onResetEdits,
+  onOpenEditor,
   name,
   onName,
   onGenerate,
@@ -391,6 +468,7 @@ function MontageCard({
   killCount: number;
   onPatchClip: (id: string, patch: ClipOverride) => void;
   onResetEdits: () => void;
+  onOpenEditor: () => void;
   name: string;
   onName: (v: string) => void;
   onGenerate: () => void;
@@ -440,6 +518,15 @@ function MontageCard({
               </p>
             )}
             {!ffmpegAvailable && <FfmpegMissing />}
+
+            <button
+              onClick={onOpenEditor}
+              disabled={!selected}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-ink-600 bg-ink-750 px-4 py-2.5 text-sm font-medium hover:bg-ink-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Clapperboard size={16} className="text-accent" />
+              Open clip editor (timeline + preview)
+            </button>
 
             <div className="flex items-center justify-between text-xs text-text-faint">
               <span>
@@ -615,5 +702,6 @@ function clock(ms: number): string {
 function recordingLabel(r: RecordingSession): string {
   const start = new Date(r.startedAt).toLocaleTimeString();
   const dur = r.endedAt ? `${Math.round((r.endedAt - r.startedAt) / 1000)}s` : 'live';
-  return `${start} · ${dur}${r.active ? ' · recording' : ''}`;
+  const round = r.round != null ? `Round ${r.round} · ` : '';
+  return `${round}${start} · ${dur}${r.active ? ' · recording' : ''}`;
 }

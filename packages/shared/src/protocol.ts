@@ -32,6 +32,7 @@ export type ServerMessage =
   | { type: 'league'; league: LeagueData }
   | { type: 'output'; output: OutputState }
   | { type: 'highlights'; state: HighlightState }
+  | { type: 'roundReplayReady'; recordingId: string; round: number | null }
   | { type: 'hello'; serverTime: number; you: SessionUser | null };
 
 /** Which monitor a pushed video frame belongs to. */
